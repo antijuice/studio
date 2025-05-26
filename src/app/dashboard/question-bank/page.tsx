@@ -152,7 +152,7 @@ export default function QuestionBankPage() {
     const criteriaTagsArray = criteriaForm.tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
     
     const initialMatchingExtractedQuestions = bankedQuestions.filter(eq => {
-      if (eq.questionType !== 'mcq') return false;
+      if (eq.questionType !== 'mcq') return false; // Only consider MCQs for criteria quiz for now
 
       const matchesDescription = criteriaForm.description.trim() === '' ||
         eq.questionText.toLowerCase().includes(criteriaForm.description.trim().toLowerCase()) ||
@@ -166,6 +166,7 @@ export default function QuestionBankPage() {
       return matchesDescription && matchesTags && matchesCategory;
     });
 
+    // Map to MCQType and then filter for validity (options and answer must exist)
     const validQuizMcqs: MCQType[] = initialMatchingExtractedQuestions
       .map(eq => ({
         id: eq.id,
@@ -180,7 +181,7 @@ export default function QuestionBankPage() {
 
     if (initialMatchingExtractedQuestions.length > 0 && validQuizMcqs.length === 0) {
         toast({
-            title: "Some MCQs Matched, But None Were Valid",
+            title: "MCQs Matched Criteria, But None Were Valid for Quiz",
             description: `Found ${initialMatchingExtractedQuestions.length} MCQ(s) matching your criteria, but none were complete (e.g., missing options or a defined answer) after validation. Please check the banked questions or broaden your criteria.`,
             variant: "destructive",
             duration: 7000,
@@ -204,9 +205,12 @@ export default function QuestionBankPage() {
     let currentIndex = poolIndices.get(criteriaKey) || 0;
     let poolNeedsRebuild = false;
 
+    // Determine if the pool needs to be rebuilt
+    // Rebuild if criteria changed OR if the set of valid questions for these criteria changed
     if (criteriaKey !== lastCriteriaKeyForPool || !currentShuffledIds) {
       poolNeedsRebuild = true;
     } else if (currentShuffledIds) { 
+      // Check if the content of the pool (valid questions) has changed
       const previousPoolSet = new Set(currentShuffledIds);
       if (currentValidMcqIdsSet.size !== previousPoolSet.size || 
           !Array.from(currentValidMcqIdsSet).every(id => previousPoolSet.has(id))) {
@@ -224,6 +228,7 @@ export default function QuestionBankPage() {
     }
     
     if (!currentShuffledIds || currentShuffledIds.length === 0) {
+        // This case should ideally be caught earlier by validQuizMcqs.length === 0
         toast({ title: "Error Building Question Pool", description: "Could not form a question pool for these criteria from valid MCQs.", variant: "destructive" });
         setIsGeneratingQuizByCriteria(false);
         return;
@@ -234,14 +239,17 @@ export default function QuestionBankPage() {
     
     const selectedQuestionIds: string[] = [];
     for (let i = 0; i < numToSelect; i++) {
-      const poolReadIndex = (currentIndex + i) % numAvailableInPool; 
+      const poolReadIndex = (currentIndex + i) % numAvailableInPool; // Ensure wrap-around for reading
       selectedQuestionIds.push(currentShuffledIds[poolReadIndex]);
     }
 
+    // Update the index for the next generation
     const newCurrentIndex = (currentIndex + numToSelect) % numAvailableInPool;
     let poolCycledThisTurn = false;
+    // If we've wrapped around AND selected enough to potentially cover the pool
     if (newCurrentIndex === 0 && (currentIndex + numToSelect >= numAvailableInPool) && numAvailableInPool > 0 && numToSelect > 0) {
       poolCycledThisTurn = true;
+      // Re-shuffle for the next cycle if the pool was fully or partially traversed to its end
       const reShuffledIds = Array.from(currentValidMcqIdsSet).sort(() => 0.5 - Math.random());
       const updatedShuffledPools = new Map(shuffledPools);
       updatedShuffledPools.set(criteriaKey, reShuffledIds);
@@ -252,14 +260,16 @@ export default function QuestionBankPage() {
     newPoolIndices.set(criteriaKey, newCurrentIndex);
     setPoolIndices(newPoolIndices);
 
+    // Get the full question objects for the selected IDs
     const finalQuizQuestions: MCQType[] = selectedQuestionIds
       .map(id => validQuizMcqs.find(mcq => mcq.id === id))
-      .filter(Boolean) as MCQType[];
+      .filter(Boolean) as MCQType[]; // Filter out any potential undefined if an ID somehow didn't match
 
 
     if (finalQuizQuestions.length === 0) {
+      // This should be rare if validQuizMcqs had items and selectedQuestionIds were derived from it
       toast({
-        title: "No Questions Selected",
+        title: "No Questions Selected for Quiz",
         description: "Could not select any questions for the quiz, though a pool was available. This might be an internal error.",
         variant: "destructive",
       });
@@ -271,16 +281,18 @@ export default function QuestionBankPage() {
     if (finalQuizQuestions.length < criteriaForm.numQuestions && numAvailableInPool < criteriaForm.numQuestions && !poolCycledThisTurn) {
       quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}) were available.`;
     } else if (finalQuizQuestions.length < criteriaForm.numQuestions && poolCycledThisTurn) {
+       // This message means we've gone through all available and re-shuffled.
        quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}). All available questions in this pool have been used and re-shuffled.`;
     } else if (finalQuizQuestions.length < criteriaForm.numQuestions && numToSelect < criteriaForm.numQuestions && numToSelect === numAvailableInPool) {
+      // Selected all available, but it was less than requested.
       quizGeneratedMessage += ` All ${numAvailableInPool} available question(s) for these criteria were selected.`;
     }
 
 
     if (poolCycledThisTurn) {
        toast({
-        title: "Question Pool Cycled",
-        description: `All available questions for these criteria have been shown. The pool has been re-shuffled. ${quizGeneratedMessage}`,
+        title: "Question Pool Cycled & Re-shuffled",
+        description: quizGeneratedMessage,
         variant: "default",
         duration: 6000,
       });
@@ -385,7 +397,7 @@ export default function QuestionBankPage() {
 
   return (
     <TooltipProvider>
-    <div className="container mx-auto p-4 md:p-8 space-y-8">
+    <div className="container mx-auto p-4 md:p-8 space-y-8 overflow-x-hidden">
       <header className="mb-8"> 
         <div className="flex items-center gap-3">
           <LibraryBig className="h-10 w-10 text-primary" />
@@ -396,7 +408,7 @@ export default function QuestionBankPage() {
         </div>
       </header>
 
-      <Card className="shadow-lg"> {/* Removed sticky classes here */}
+      <Card className="shadow-lg sticky top-4 z-20 bg-card/95 backdrop-blur-sm border">
         <CardHeader>
             <div className="flex justify-between items-center">
                 <CardTitle className="text-xl flex items-center gap-2"><PackagePlus className="h-6 w-6 text-accent"/>Quiz Assembly</CardTitle>
@@ -815,5 +827,7 @@ export default function QuestionBankPage() {
     </TooltipProvider>
   );
 }
+
+    
 
     
