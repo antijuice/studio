@@ -19,7 +19,8 @@ import {
   History,
   Library,
   LogOut, // Added LogOut icon
-  Loader2
+  Loader2,
+  Sparkles, // Icon for Extract Questions
 } from 'lucide-react';
 import {
   SidebarProvider,
@@ -51,6 +52,7 @@ const navItems = [
     subItems: [
       { href: '/dashboard/quizzes/custom', label: 'Create Custom Quiz', icon: Wand2 },
       { href: '/dashboard/quizzes/pdf-generator', label: 'Quiz from PDF', icon: FileText },
+      { href: '/dashboard/quizzes/extract-pdf', label: 'Extract Questions', icon: Sparkles }, // New link
       { href: '/dashboard/quizzes/short-answer', label: 'Short Answer Practice', icon: MessageSquareText },
       { href: '/dashboard/quizzes/sessions', label: 'Past Sessions', icon: History },
     ],
