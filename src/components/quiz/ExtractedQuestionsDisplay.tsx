@@ -19,10 +19,9 @@ import { saveQuestionToBankAction, suggestMcqAnswerAction, suggestExplanationAct
 import { Separator } from '../ui/separator';
 import { MathText } from '../ui/MathText';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
-import { useAuth } from '@/contexts/AuthContext'; // Added useAuth
+import { useAuth } from '@/contexts/AuthContext';
 
-// Re-define ExtractedQuestion type to include the client-side `id`
-type ExtractedQuestion = AIExtractedQuestion & { id: string }; // This id is client-generated during extraction
+type ExtractedQuestion = AIExtractedQuestion & { id: string }; 
 
 interface ExtractedQuestionsDisplayProps {
   extractionResult: { extractedQuestions: ExtractedQuestion[] }; 
@@ -53,7 +52,7 @@ type EditableQuestionData = Omit<ExtractedQuestion, 'id' | 'questionType' | 'use
 
 export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestionsDisplayProps) {
   const { toast } = useToast();
-  const { user } = useAuth(); // Get authenticated user
+  const { user } = useAuth();
 
   const [editableQuestions, setEditableQuestions] = useState<ExtractedQuestion[]>([]);
   const [saveStates, setSaveStates] = useState<QuestionSaveStateType>({});
@@ -72,13 +71,11 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   const [isSuggestingAnswerInDialog, setIsSuggestingAnswerInDialog] = useState(false);
   const [isSuggestingExplanationInDialog, setIsSuggestingExplanationInDialog] = useState(false);
 
-
   useEffect(() => {
     if (extractionResult && extractionResult.extractedQuestions) {
       setEditableQuestions(extractionResult.extractedQuestions);
       const initialSaveStates: QuestionSaveStateType = {};
       extractionResult.extractedQuestions.forEach(eq => {
-        // For now, we don't check against DB on load here, just local session state
         initialSaveStates[eq.id] = { isLoading: false, isSaved: false };
       });
       setSaveStates(initialSaveStates);
@@ -159,12 +156,9 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     return filteredQuestions.filter(q => !saveStates[q.id]?.isSaved);
   }, [filteredQuestions, saveStates]);
 
-  const triggerSaveProcess = useCallback(async (questionToSave: ExtractedQuestion): Promise<boolean> => {
-    if (!user) {
-      toast({ title: "Authentication Error", description: "You must be logged in to save questions.", variant: "destructive" });
-      return false;
-    }
-
+  const triggerSaveProcess = useCallback(async (questionToSave: ExtractedQuestion, currentUserId?: string): Promise<boolean> => {
+    // Removed client-side !currentUserId check. Server action will handle userId validation.
+    
     setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: true, isSaved: false } }));
     const { id: clientId, userId: existingUserId, createdAt, ...dataToSave } = questionToSave;
 
@@ -176,9 +170,15 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     }
 
     try {
-      const result: SaveQuestionToBankOutput = await saveQuestionToBankAction(dataToSave, user.uid);
+      // Ensure currentUserId is passed, action expects string. If user is null, currentUserId will be undefined.
+      // The action will throw "User ID not provided..." if currentUserId is undefined or empty.
+      if (!currentUserId) { // Add this check to satisfy TypeScript and prevent calling action with undefined
+          throw new Error("User ID is not available. Cannot save question.");
+      }
+      const result: SaveQuestionToBankOutput = await saveQuestionToBankAction(dataToSave, currentUserId);
       if (result.success && result.questionId) {
         setSaveStates(prev => ({ ...prev, [clientId]: { isLoading: false, isSaved: true, dbId: result.questionId } }));
+        // No need to call addQuestionToBank context function here, as QuestionBankPage fetches directly
         if (!isSavingAll) {
           toast({
             title: "Question Saved to Database",
@@ -209,7 +209,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       }
       return false;
     }
-  }, [toast, isSavingAll, user]);
+  }, [toast, isSavingAll]);
 
 
   const handleOpenEditDialog = (questionId: string) => {
@@ -248,7 +248,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     setEditableQuestions(prev => prev.map(q => q.id === questionWithEdits.id ? questionWithEdits : q));
     setIsEditDialogOpen(false);
     
-    await triggerSaveProcess(questionWithEdits); 
+    await triggerSaveProcess(questionWithEdits, user.uid); 
     setCurrentQuestionForEdit(null);
   };
 
@@ -279,7 +279,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     );
 
     const results = await Promise.allSettled(
-      questionsToProcess.map(q => triggerSaveProcess(q))
+      questionsToProcess.map(q => triggerSaveProcess(q, user.uid))
     );
 
     results.forEach(result => {
@@ -543,7 +543,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
         <div className="flex flex-col sm:flex-row justify-end gap-2 flex-wrap">
           <Button
             onClick={handleSuggestAllMissingAnswers}
-            disabled={isSuggestingAllAnswers || filteredQuestions.filter(q => q.questionType === 'mcq' && !saveStates[q.id]?.isSaved && (!q.answer || q.answer.trim() === '' || (q.options && !q.options.includes(q.answer)))).length === 0}
+            disabled={isSuggestingAllAnswers || filteredQuestions.filter(q => q.questionType === 'mcq' && !saveStates[q.id]?.isSaved && (!q.answer || q.answer.trim() === '' || (q.options && !q.options.includes(q.answer)))).length === 0 || !user}
             variant="outline"
             size="sm"
           >
@@ -556,7 +556,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
           </Button>
           <Button
             onClick={handleSuggestAllMissingExplanations}
-            disabled={isSuggestingAllExplanations || filteredQuestions.filter(q => (!q.explanation || q.explanation.trim() === '') && !saveStates[q.id]?.isSaved).length === 0}
+            disabled={isSuggestingAllExplanations || filteredQuestions.filter(q => (!q.explanation || q.explanation.trim() === '') && !saveStates[q.id]?.isSaved).length === 0 || !user}
             variant="outline"
             size="sm"
           >
@@ -569,7 +569,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
           </Button>
           <Button
             onClick={handleSaveAllUnsaved}
-            disabled={isSavingAll || unsavedFilteredQuestions.length === 0}
+            disabled={isSavingAll || unsavedFilteredQuestions.length === 0 || !user}
             variant="default"
             size="sm"
             className="bg-primary hover:bg-primary/90"
@@ -629,7 +629,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                       size="sm"
                       onClick={() => handleOpenEditDialog(item.id)}
                       className={`ml-4 flex-shrink-0 ${currentSaveState.isSaved ? "bg-green-600 hover:bg-green-700 text-white" : ""}`}
-                      disabled={currentSaveState.isLoading}
+                      disabled={currentSaveState.isLoading || !user}
                     >
                       {currentSaveState.isLoading ? (
                         <Loader2 className="mr-2 h-3 w-3 animate-spin" />
@@ -755,7 +755,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                       variant="outline"
                       size="sm"
                       onClick={handleAISuggestAnswerInDialog}
-                      disabled={isSuggestingAnswerInDialog || !editedData.questionText}
+                      disabled={isSuggestingAnswerInDialog || !editedData.questionText || !user}
                       className="mt-2 w-full"
                     >
                       {isSuggestingAnswerInDialog ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lightbulb className="mr-2 h-4 w-4" />}
@@ -808,7 +808,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                     variant="outline"
                     size="sm"
                     onClick={handleAISuggestExplanationInDialog}
-                    disabled={isSuggestingExplanationInDialog || !editedData.questionText}
+                    disabled={isSuggestingExplanationInDialog || !editedData.questionText || !user}
                     className="mt-2 w-full"
                   >
                     {isSuggestingExplanationInDialog ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <WandSparkles className="mr-2 h-4 w-4" />}
@@ -850,7 +850,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
               <DialogClose asChild>
                 <Button variant="outline">Cancel</Button>
               </DialogClose>
-              <Button onClick={handleConfirmSaveFromDialog}>Confirm & Save to Database</Button>
+              <Button onClick={handleConfirmSaveFromDialog} disabled={isSuggestingAnswerInDialog || isSuggestingExplanationInDialog || !user}>Confirm & Save to Database</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -858,5 +858,3 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     </div>
   );
 }
-
-    
