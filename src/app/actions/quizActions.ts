@@ -15,7 +15,12 @@ import {
   type EvaluateShortAnswerInput, 
   type EvaluateShortAnswerOutput 
 } from "@/ai/flows/evaluate-short-answer";
-import type { CustomQuizGenOutput, PdfQuizGenOutput, ShortAnswerEvaluationOutput } from "@/lib/types";
+import {
+  extractQuestionsFromPdf as extractQuestionsAI,
+  type ExtractQuestionsFromPdfInput,
+  type ExtractQuestionsFromPdfOutput,
+} from "@/ai/flows/extract-questions-from-pdf-flow";
+import type { CustomQuizGenOutput, PdfQuizGenOutput, ShortAnswerEvaluationOutput, ExtractedQuestion } from "@/lib/types"; // Added ExtractedQuestion
 
 export async function generateCustomQuizAction(input: GenerateCustomQuizInput): Promise<CustomQuizGenOutput> {
   try {
@@ -52,5 +57,16 @@ export async function evaluateShortAnswerAction(input: EvaluateShortAnswerInput)
   } catch (error) {
     console.error("Error in evaluateShortAnswerAction:", error);
     throw new Error("Failed to evaluate short answer. Please try again.");
+  }
+}
+
+export async function extractQuestionsFromPdfAction(input: ExtractQuestionsFromPdfInput): Promise<ExtractQuestionsFromPdfOutput> {
+  try {
+    const result = await extractQuestionsAI(input);
+    // The AI flow output type matches ExtractQuestionsFromPdfOutput directly
+    return result as ExtractQuestionsFromPdfOutput;
+  } catch (error) {
+    console.error("Error in extractQuestionsFromPdfAction:", error);
+    throw new Error("Failed to extract questions from PDF. Please try again.");
   }
 }

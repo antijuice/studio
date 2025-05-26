@@ -86,6 +86,22 @@ export type ShortAnswerEvaluationOutput = {
   feedback: string;
 };
 
+// For AI extracted questions from PDF (matching AI flow output)
+export type ExtractedQuestion = {
+  questionText: string;
+  questionType: 'mcq' | 'short_answer' | 'true_false' | 'fill_in_the_blank' | 'unknown';
+  options?: string[];
+  answer?: string;
+  explanation?: string;
+  suggestedTags: string[];
+  suggestedCategory: string;
+};
+
+export type ExtractQuestionsFromPdfOutput = {
+  extractedQuestions: ExtractedQuestion[];
+};
+
+
 // For form inputs
 export type CustomQuizFormParams = {
   syllabus: string;
@@ -103,4 +119,10 @@ export type ShortAnswerFormParams = {
   question: string;
   userAnswer: string;
   modelAnswer?: string;
+};
+
+// For the new extract questions flow input
+export type ExtractQuestionsFromPdfInput = {
+  pdfDataUri: string;
+  topicHint?: string;
 };
