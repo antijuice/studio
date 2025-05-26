@@ -24,6 +24,12 @@ const ExtractQuestionsFromPdfInputSchema = z.object({
     .describe(
       'Optional: A hint about the general topic of the PDF to improve tagging and categorization (e.g., "Chapter 5 on Photosynthesis").'
     ),
+  globalTags: z
+    .string()
+    .optional()
+    .describe(
+        'Optional: Comma-separated global tags to apply to all extracted questions (e.g., "Midterm Exam, Biology 101"). These will be added to the question-specific tags.'
+    ),
 });
 export type ExtractQuestionsFromPdfInput = z.infer<typeof ExtractQuestionsFromPdfInputSchema>;
 
@@ -48,7 +54,7 @@ const ExtractedQuestionSchema = z.object({
     .describe('An explanation for the correct answer, if available or inferable from the text.'),
   suggestedTags: z
     .array(z.string())
-    .describe('An array of 3-5 relevant keywords or tags for the question, derived from its content.'),
+    .describe('An array of 3-7 relevant keywords or tags for the question, derived from its content and including any global tags if provided.'),
   suggestedCategory: z
     .string()
     .describe(
@@ -67,7 +73,7 @@ const ExtractQuestionsFromPdfOutputSchema = z.object({
   extractedQuestions: z
     .array(ExtractedQuestionSchema)
     .describe(
-      'An array of question objects, each containing the question details, suggested tags, a category, and a description of any relevant image, extracted from the PDF.'
+      'An array of question objects, each containing the question details, suggested tags (including global ones), a category, and a description of any relevant image, extracted from the PDF.'
     ),
 });
 export type ExtractQuestionsFromPdfOutput = z.infer<typeof ExtractQuestionsFromPdfOutputSchema>;
@@ -93,6 +99,14 @@ Document Content (from PDF):
 The general topic or context of this document is: {{{topicHint}}}. Use this information to guide your tagging, categorization, and image relevance assessment more accurately.
 {{/if}}
 
+{{#if globalTags}}
+The user has provided the following global tags that should be applied to ALL questions extracted: "{{{globalTags}}}".
+Please parse these comma-separated tags. For each question you extract, ensure its "suggestedTags" array includes these global tags. Then, add 2-4 additional specific tags you identify for that particular question. The final "suggestedTags" array should contain both the global tags and the specific tags you've generated. Avoid duplicating tags if a global tag is also highly relevant specifically.
+{{else}}
+For each question, provide 3-5 relevant and specific keywords or tags based on its content for the "suggestedTags" array.
+{{/if}}
+
+
 Please structure your output as a JSON object strictly adhering to the schema provided for "ExtractQuestionsFromPdfOutput".
 The root object must have a key "extractedQuestions", which is an array of question objects.
 Each question object in the "extractedQuestions" array must have the following fields:
@@ -105,7 +119,7 @@ Each question object in the "extractedQuestions" array must have the following f
     - For 'true_false', this should be "True" or "False".
     - Omit this field if the answer is not identifiable or not applicable.
 - "explanation": (string, optional) An explanation for the correct answer. If not directly present, try to infer or generate a concise one if possible. Omit if not applicable.
-- "suggestedTags": (array of strings) Provide 3-5 relevant and specific keywords or tags for the question based on its content.
+- "suggestedTags": (array of strings) As instructed above, combine global tags (if provided) with 3-5 question-specific tags.
 - "suggestedCategory": (string) Suggest a single, broader academic subject or category for this question (e.g., "Physics", "Literature", "Ancient History", "Calculus", "Organic Chemistry").
 - "relevantImageDescription": (string, optional) Examine the content of the question and its surrounding area on the same page in the PDF. If there is a distinct visual element (like a diagram, chart, photograph, or illustration) that is *directly and highly relevant* to understanding or answering that specific question, provide a brief description of this visual element. For example, 'A diagram of a plant cell with labels for nucleus and chloroplast, relevant to the question about cell organelles.' If no such specific, relevant visual is present for a question, or if it's just decorative or not on the same page, omit this field. Do not attempt to extract image data itself.
 

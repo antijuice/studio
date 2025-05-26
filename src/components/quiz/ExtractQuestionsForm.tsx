@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import type { ExtractQuestionsFromPdfOutput, ExtractQuestionsFromPdfInput } from "@/lib/types";
 import { extractQuestionsFromPdfAction } from "@/app/actions/quizActions";
-import { Sparkles, UploadCloud } from "lucide-react";
+import { Sparkles, UploadCloud, Tags } from "lucide-react"; // Added Tags icon
 import React, { useState } from "react";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB for potentially larger PDFs with questions
@@ -34,6 +34,7 @@ const formSchema = z.object({
       "Only .pdf files are accepted."
     ),
   topicHint: z.string().max(500).optional(),
+  globalTags: z.string().max(200).optional().describe("Comma-separated tags to apply to all questions."),
 });
 
 interface ExtractQuestionsFormProps {
@@ -49,6 +50,7 @@ export function ExtractQuestionsForm({ onExtractionComplete, setIsLoading }: Ext
     resolver: zodResolver(formSchema),
     defaultValues: {
       topicHint: "",
+      globalTags: "",
     },
   });
 
@@ -75,6 +77,7 @@ export function ExtractQuestionsForm({ onExtractionComplete, setIsLoading }: Ext
         const input: ExtractQuestionsFromPdfInput = {
           pdfDataUri,
           topicHint: values.topicHint,
+          globalTags: values.globalTags,
         };
         const result = await extractQuestionsFromPdfAction(input);
         
@@ -110,7 +113,7 @@ export function ExtractQuestionsForm({ onExtractionComplete, setIsLoading }: Ext
         <FormField
           control={form.control}
           name="pdfFile"
-          render={({ field }) => ( // field is not directly used for Input type="file" with custom handler
+          render={({ field }) => ( 
             <FormItem>
               <FormLabel>PDF Document</FormLabel>
               <FormControl>
@@ -151,7 +154,25 @@ export function ExtractQuestionsForm({ onExtractionComplete, setIsLoading }: Ext
                 <Textarea placeholder="e.g., Chapter 5: Photosynthesis, Focus on key definitions and processes" {...field} />
               </FormControl>
               <FormDescription>
-                Provide a hint about the PDF's topic to improve tagging and categorization.
+                Provide a hint about the PDF's topic to improve AI tagging and categorization.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+         <FormField
+          control={form.control}
+          name="globalTags"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="flex items-center">
+                <Tags className="mr-2 h-4 w-4" /> Global Tags (Optional)
+              </FormLabel>
+              <FormControl>
+                <Input placeholder="e.g., biology, midterm, chapter5" {...field} />
+              </FormControl>
+              <FormDescription>
+                Comma-separated tags that will be applied to all questions extracted from this PDF.
               </FormDescription>
               <FormMessage />
             </FormItem>

@@ -95,7 +95,7 @@ export type ExtractedQuestion = {
   explanation?: string;
   suggestedTags: string[];
   suggestedCategory: string;
-  relevantImageDescription?: string; // Added new field
+  relevantImageDescription?: string;
 };
 
 export type ExtractQuestionsFromPdfOutput = {
@@ -126,5 +126,6 @@ export type ShortAnswerFormParams = {
 export type ExtractQuestionsFromPdfInput = {
   pdfDataUri: string;
   topicHint?: string;
+  globalTags?: string; // Comma-separated tags
 };
 
