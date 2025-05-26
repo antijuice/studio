@@ -16,7 +16,7 @@ import { MathText } from '@/components/ui/MathText';
 import { useQuestionBank } from '@/contexts/QuestionBankContext';
 import { useQuizAssembly } from '@/contexts/QuizAssemblyContext';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { QuizDisplay } from '@/components/quiz/QuizDisplay'; // Import QuizDisplay
+import { QuizDisplay } from '@/components/quiz/QuizDisplay';
 import { useToast } from '@/hooks/use-toast';
 
 const questionTypeLabels: Record<ExtractedQuestion['questionType'], string> = {
@@ -66,7 +66,7 @@ export default function QuestionBankPage() {
     description: '',
     tags: '',
     category: ALL_FILTER_VALUE,
-    questionType: 'mcq', // Default to MCQ as QuizDisplay handles it best
+    questionType: 'mcq', 
     numQuestions: 5,
   });
   const [currentQuiz, setCurrentQuiz] = useState<QuizType | null>(null);
@@ -102,9 +102,7 @@ export default function QuestionBankPage() {
 
   const handleCriteriaFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    // Special handling for select elements because their event doesn't have a 'name' attribute directly
     if (e.target.id === 'criteriaCategory' || e.target.id === 'criteriaQuestionType') {
-       // This case should be handled by onValueChange for Select components
       return;
     }
     setCriteriaForm(prev => ({ ...prev, [name]: name === 'numQuestions' ? parseInt(value, 10) : value }));
@@ -120,7 +118,6 @@ export default function QuestionBankPage() {
     const criteriaTags = criteriaForm.tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
     
     let potentialQuestions = bankedQuestions.filter(q => {
-      // Only consider MCQs for now as QuizDisplay is optimized for them
       if (q.questionType !== 'mcq') return false;
 
       const matchesDescription = criteriaForm.description === '' ||
@@ -131,48 +128,47 @@ export default function QuestionBankPage() {
         criteriaTags.every(ct => q.suggestedTags.some(qt => qt.toLowerCase().includes(ct)));
       
       const matchesCategory = criteriaForm.category === ALL_FILTER_VALUE || q.suggestedCategory === criteriaForm.category;
-      const matchesType = criteriaForm.questionType === ALL_FILTER_VALUE || q.questionType === criteriaForm.questionType;
-
-      return matchesDescription && matchesTags && matchesCategory && matchesType;
+      
+      return matchesDescription && matchesTags && matchesCategory;
     });
 
     if (potentialQuestions.length === 0) {
       toast({
-        title: "No Questions Found",
-        description: "No questions in the bank match your criteria. Try broadening your search.",
+        title: "No MCQs Found Matching Criteria",
+        description: "No MCQs in the bank match your specified description, tags, or category. Try broadening your search.",
         variant: "destructive",
       });
       setIsGeneratingQuizByCriteria(false);
       return;
     }
 
-    // Shuffle and pick numQuestions
     const shuffled = potentialQuestions.sort(() => 0.5 - Math.random());
     const selectedExtractedQuestions = shuffled.slice(0, criteriaForm.numQuestions);
 
-    // Map ExtractedQuestion to MCQType
     const mappedQuestions: MCQType[] = selectedExtractedQuestions.map(eq => ({
       id: eq.id,
-      question: eq.questionText, // Map questionText to question
-      options: eq.options || [], // Ensure options is an array
-      answer: eq.answer || "",   // Ensure answer is a string
+      question: eq.questionText,
+      options: eq.options ? [...eq.options] : [], // Ensure it's a new array, or empty if options is undefined/null
+      answer: typeof eq.answer === 'string' ? eq.answer : "", // Ensure answer is a string, default to "" if not string (e.g. undefined/null)
       explanation: eq.explanation || "No explanation provided.",
-      type: 'mcq',
-    })).filter(q => q.options.length > 0 && q.answer !== ""); // Ensure MCQs are valid
+      type: 'mcq', // Explicitly set type
+    })).filter(q => q.options.length > 0 && q.answer.trim() !== ""); // Validate: must have options and a non-empty (trimmed) answer
+
 
     if (mappedQuestions.length < criteriaForm.numQuestions && mappedQuestions.length < selectedExtractedQuestions.length) {
        toast({
-            title: "Some Questions Invalid",
-            description: `Found ${selectedExtractedQuestions.length} matching questions, but only ${mappedQuestions.length} were valid MCQs. The quiz will proceed with available valid questions.`,
-            variant: "default", // "default" or "warning" if you had one
+            title: "Some Matched Questions Invalid",
+            description: `Found ${selectedExtractedQuestions.length} MCQs matching your criteria, but only ${mappedQuestions.length} were complete (had options and a non-empty answer). The quiz will proceed with available valid questions.`,
+            variant: "default", 
          });
     }
     
     if (mappedQuestions.length === 0) {
          toast({
             title: "Not Enough Valid MCQs",
-            description: `Could not find ${criteriaForm.numQuestions} valid MCQs matching criteria. Found ${potentialQuestions.length} initial matches, but none were usable after validation.`,
+            description: `Could not create a quiz. Although ${potentialQuestions.length} MCQs matched your criteria, none were complete (e.g., missing options or a defined answer) after validation. Please check the banked questions or broaden your criteria.`,
             variant: "destructive",
+            duration: 7000,
          });
          setIsGeneratingQuizByCriteria(false);
          return;
@@ -180,8 +176,8 @@ export default function QuestionBankPage() {
     
     const newQuiz: QuizType = {
       id: `criteria-quiz-${Date.now()}`,
-      title: `Quiz based on: ${criteriaForm.description || 'Selected Criteria'}`,
-      questions: mappedQuestions, // Use the mapped questions
+      title: `Quiz: ${criteriaForm.description || 'Selected Criteria'}`,
+      questions: mappedQuestions,
       createdAt: new Date(),
     };
     setCurrentQuiz(newQuiz);
@@ -221,8 +217,7 @@ export default function QuestionBankPage() {
         </div>
       </header>
 
-      {/* Quiz Assembly Summary Card */}
-      <Card className="shadow-lg sticky top-4 md:top-20 z-20 bg-card/95 backdrop-blur-sm"> {/* Adjusted top for mobile */}
+      <Card className="shadow-lg sticky top-4 md:top-20 z-20 bg-card/95 backdrop-blur-sm">
         <CardHeader>
             <div className="flex justify-between items-center">
                 <CardTitle className="text-xl flex items-center gap-2"><PackagePlus className="h-6 w-6 text-accent"/>Quiz Assembly</CardTitle>
@@ -251,7 +246,6 @@ export default function QuestionBankPage() {
         </CardFooter>
       </Card>
 
-      {/* Start Quiz by Criteria Card */}
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="text-xl flex items-center gap-2"><Wand2 className="h-6 w-6 text-primary"/>Start Quiz by Criteria</CardTitle>
@@ -306,9 +300,7 @@ export default function QuestionBankPage() {
               >
                 <SelectTrigger id="criteriaQuestionType" className="mt-1"><SelectValue placeholder="Any MCQ Type" /></SelectTrigger>
                 <SelectContent>
-                  {/* <SelectItem value={ALL_FILTER_VALUE}>Any Type (MCQ Recommended)</SelectItem> */}
                   <SelectItem value="mcq">Multiple Choice (Recommended)</SelectItem>
-                  {/* Add other types if QuizDisplay supports them well in future */}
                 </SelectContent>
               </Select>
                <p className="text-xs text-muted-foreground mt-1">Currently, only MCQs are recommended for reliable quiz generation.</p>
@@ -341,7 +333,6 @@ export default function QuestionBankPage() {
       </Card>
 
 
-      {/* Browse Banked Questions Section */}
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5"/> Filter Banked Questions</CardTitle>
@@ -509,6 +500,3 @@ export default function QuestionBankPage() {
     </TooltipProvider>
   );
 }
-
-
-    
