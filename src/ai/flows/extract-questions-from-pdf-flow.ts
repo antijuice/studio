@@ -10,7 +10,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z}_ from 'genkit'; // Using z from genkit internal for schema only
+import { z as z_ } from 'genkit'; // Using z from genkit internal for schema only
 
 // Internal Zod Schemas - NOT EXPORTED from this 'use server' file
 const InternalExtractQuestionsFromPdfInputSchema = z_.object({
