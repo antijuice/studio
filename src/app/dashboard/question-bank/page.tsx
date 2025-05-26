@@ -9,9 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare } from 'lucide-react';
 import type { ExtractedQuestion } from '@/lib/types'; 
-import { MathText } from '@/components/ui/MathText'; // Import MathText
+import { MathText } from '@/components/ui/MathText';
 
-// Mock data for the question bank - replace with actual data fetching later
 const mockBankQuestions: ExtractedQuestion[] = [
   {
     id: 'bank-q1',
@@ -19,17 +18,17 @@ const mockBankQuestions: ExtractedQuestion[] = [
     questionType: 'mcq',
     options: ['Nucleus', 'Mitochondria', 'Ribosome', 'Endoplasmic Reticulum'],
     answer: 'Mitochondria',
-    explanation: 'Mitochondria are responsible for generating most of the cell\'s supply of adenosine triphosphate (ATP), used as a source of chemical energy. Equation: $$ATP \rightarrow ADP + P_i$$',
+    explanation: 'Mitochondria are responsible for generating most of the cell\'s supply of adenosine triphosphate (ATP), used as a source of chemical energy. Equation: $$ATP \\rightarrow ADP + P_i$$',
     suggestedTags: ['biology', 'cell biology', 'organelles'],
     suggestedCategory: 'Biology',
     marks: 2,
   },
   {
     id: 'bank-q2',
-    questionText: 'Explain the process of photosynthesis in brief, including the formula $6CO_2 + 6H_2O \rightarrow C_6H_{12}O_6 + 6O_2$.',
+    questionText: 'Explain the process of photosynthesis in brief, including the formula $6CO_2 + 6H_2O \\rightarrow C_6H_{12}O_6 + 6O_2$.',
     questionType: 'short_answer',
     answer: 'Photosynthesis is the process used by plants, algae, and certain bacteria to harness energy from sunlight and turn it into chemical energy.',
-    explanation: 'Key stages include light-dependent reactions (capturing light energy) and light-independent reactions (Calvin cycle - fixing carbon dioxide). The overall equation is $$6\text{CO}_2 + 6\text{H}_2\text{O} + \text{Light Energy} \rightarrow \text{C}_6\text{H}_{12}\text{O}_6 + 6\text{O}_2$$.',
+    explanation: 'Key stages include light-dependent reactions (capturing light energy) and light-independent reactions (Calvin cycle - fixing carbon dioxide). The overall equation is $$6\\text{CO}_2 + 6\\text{H}_2\\text{O} + \\text{Light Energy} \\rightarrow \\text{C}_6\\text{H}_{12}\\text{O}_6 + 6\\text{O}_2$$.',
     suggestedTags: ['biology', 'plants', 'photosynthesis', 'energy'],
     suggestedCategory: 'Biology',
     marks: 5,
@@ -74,11 +73,11 @@ const questionTypeLabels: Record<ExtractedQuestion['questionType'], string> = {
 };
 
 const QuestionTypeIcon = ({ type }: { type: ExtractedQuestion['questionType'] }) => {
-  if (type === 'mcq') return <ListChecks className="h-4 w-4 text-blue-500" />;
-  if (type === 'short_answer') return <MessageSquare className="h-4 w-4 text-green-500" />;
-  if (type === 'true_false') return <CheckCircle className="h-4 w-4 text-purple-500" />;
-  if (type === 'fill_in_the_blank') return <FileText className="h-4 w-4 text-orange-500" />;
-  return <FileText className="h-4 w-4 text-muted-foreground" />;
+  if (type === 'mcq') return <ListChecks className="h-4 w-4 text-blue-500 flex-shrink-0" />;
+  if (type === 'short_answer') return <MessageSquare className="h-4 w-4 text-green-500 flex-shrink-0" />;
+  if (type === 'true_false') return <CheckCircle className="h-4 w-4 text-purple-500 flex-shrink-0" />;
+  if (type === 'fill_in_the_blank') return <FileText className="h-4 w-4 text-orange-500 flex-shrink-0" />;
+  return <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />;
 };
 
 const ALL_FILTER_VALUE = "__ALL__";
@@ -166,11 +165,11 @@ export default function QuestionBankPage() {
                 <Card key={question.id} className="shadow-md hover:shadow-lg transition-shadow bg-card">
                   <CardHeader>
                     <div className="flex justify-between items-start">
-                        <div className="text-lg flex items-center gap-2 flex-1 min-w-0">
+                        <div className="text-lg flex items-start gap-2 flex-1 min-w-0"> {/* Changed to items-start */}
                             <QuestionTypeIcon type={question.questionType} />
-                             <MathText text={question.questionText.substring(0,100) + (question.questionText.length > 100 ? '...' : '')} className="truncate"/>
+                             <MathText text={question.questionText} /> {/* Removed substring and truncate */}
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap"> {/* Added flex-wrap */}
                             {question.marks !== undefined && (
                                 <Badge variant="outline" className="flex items-center gap-1">
                                     <SigmaSquare className="h-3 w-3"/> {question.marks} Marks
@@ -196,7 +195,7 @@ export default function QuestionBankPage() {
                     )}
                      {question.explanation && (
                          <div className="text-xs text-muted-foreground italic p-2 bg-muted/30 rounded-md border">
-                           <strong>Explanation:</strong> <MathText text={question.explanation.substring(0,150) + (question.explanation.length > 150 ? '...' : '')} />
+                           <strong>Explanation:</strong> <MathText text={question.explanation.substring(0,300) + (question.explanation.length > 300 ? '...' : '')} /> {/* Kept substring for brevity here */}
                         </div>
                      )}
                     {question.suggestedTags && question.suggestedTags.length > 0 && (
@@ -249,4 +248,3 @@ export default function QuestionBankPage() {
     </div>
   );
 }
-

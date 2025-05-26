@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { InlineMath, BlockMath } from 'react-katex';
-import { cn } from "@/lib/utils"; // Added import for cn
+import { cn } from "@/lib/utils";
 
 interface MathTextProps {
   text: string | undefined | null;
@@ -36,11 +36,10 @@ const MathText: React.FC<MathTextProps> = ({ text, className }) => {
     }
   });
 
-  // Add overflow-x-auto to the root div to handle very wide math expressions
-  // The `prose` class helps with text wrapping and styling.
-  // `min-w-0` is added to ensure it behaves correctly within flex containers.
-  return <div className={cn("overflow-x-auto min-w-0", className)}>{elements}</div>;
+  // min-w-0 is important for flex containers to allow wrapping/shrinking.
+  // Removed overflow-x-auto to prevent internal scrollbars.
+  // Text wrapping is handled by default by block/inline elements.
+  return <div className={cn("min-w-0", className)}>{elements}</div>;
 };
 
 export { MathText };
-

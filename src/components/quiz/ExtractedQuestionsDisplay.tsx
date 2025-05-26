@@ -15,7 +15,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { useToast } from '@/hooks/use-toast';
 import { saveQuestionToBankAction } from '@/app/actions/quizActions';
 import { Separator } from '../ui/separator';
-import { MathText } from '../ui/MathText'; // Import MathText
+import { MathText } from '../ui/MathText';
 
 interface ExtractedQuestionsDisplayProps {
   extractionResult: ExtractQuestionsFromPdfOutput;
@@ -41,7 +41,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   const { toast } = useToast();
   const [saveStates, setSaveStates] = useState<QuestionSaveStateType>({});
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [tagSearchTerm, setTagSearchTerm] = useState('');
   const [isSavingAll, setIsSavingAll] = useState(false);
 
@@ -63,7 +63,8 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
 
     return extractionResult.extractedQuestions.filter(question => {
       const matchesSearchTerm = searchTerm === '' || 
-        question.questionText.toLowerCase().includes(searchTerm.toLowerCase());
+        question.questionText.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (question.explanation && question.explanation.toLowerCase().includes(searchTerm.toLowerCase()));
       
       const matchesCategory = selectedCategory === '' || selectedCategory === 'all' || 
         question.suggestedCategory === selectedCategory;
@@ -83,10 +84,10 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
 
   const handleSaveToBank = useCallback(async (question: ExtractedQuestion): Promise<boolean> => {
     setSaveStates(prev => ({ ...prev, [question.id]: { isLoading: true, isSaved: false } }));
-    if (!isSavingAll) {
+    if (!isSavingAll) { // Only show individual toast if not part of "Save All"
       toast({
         title: "Saving Question...",
-        description: `Attempting to save "${question.questionText.substring(0, 30)}..." to the bank.`,
+        description: `Attempting to save question to the bank.`,
       });
     }
 
@@ -96,7 +97,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
         setSaveStates(prev => ({ ...prev, [question.id]: { isLoading: false, isSaved: true } }));
         if (!isSavingAll) {
           toast({
-            title: "Question Saved (Simulated)",
+            title: "Question Saved",
             description: result.message || `Question with ID ${result.questionId} saved.`,
           });
         }
@@ -106,7 +107,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
         if (!isSavingAll) {
           toast({
             variant: "destructive",
-            title: "Save Failed (Simulated)",
+            title: "Save Failed",
             description: result.message,
           });
         }
@@ -160,7 +161,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     toast({
         title: "Batch Save Complete",
         description: `${successCount} question(s) saved. ${failureCount > 0 ? `${failureCount} failed.` : ''}`,
-        variant: failureCount > 0 && successCount === 0 ? "destructive" : "default",
+        variant: failureCount > 0 && successCount === 0 ? "destructive" : failureCount > 0 ? "default" : "default", // destructive only if all fail
         duration: 5000,
     });
   };
@@ -190,7 +191,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
             <Input
               id="search-questions"
               type="text"
-              placeholder="Search question text..."
+              placeholder="Search question text or explanation..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="bg-background"
@@ -221,12 +222,12 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
             <Input
               id="tag-search"
               type="text"
-              placeholder="e.g., biology, mitosis"
+              placeholder="e.g., biology, mitosis (comma-sep.)"
               value={tagSearchTerm}
               onChange={(e) => setTagSearchTerm(e.target.value)}
               className="bg-background"
             />
-            <p className="text-xs text-muted-foreground mt-1">Comma-separated. Shows questions matching ALL tags.</p>
+            <p className="text-xs text-muted-foreground mt-1">Shows questions matching ALL tags.</p>
           </div>
         </div>
         <Separator className="my-4" />
@@ -253,7 +254,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
           <Info className="h-4 w-4" />
           <AlertTitle>No Matching Questions</AlertTitle>
           <AlertDescription>
-            No extracted questions match your current search term or category filter. Try adjusting your filters.
+            No extracted questions match your current search term or filters. Try adjusting your filters.
           </AlertDescription>
         </Alert>
       )}
@@ -264,9 +265,11 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
           return (
             <AccordionItem value={item.id} key={item.id}>
               <AccordionTrigger className="hover:no-underline text-left">
-                <div className="flex flex-col md:flex-row md:items-center justify-between w-full pr-2">
-                  <span className="font-semibold md:truncate flex-1 mr-2">
-                     <MathText text={`Q${index + 1}: ${item.questionText.substring(0, 80)}${item.questionText.length > 80 ? '...' : ''}`} />
+                <div className="flex flex-col md:flex-row md:items-start justify-between w-full pr-2">
+                  {/* Changed md:items-center to md:items-start to allow multi-line text to align top */}
+                  <span className="font-semibold flex-1 mr-2 min-w-0"> {/* Added min-w-0 for flex child */}
+                     <MathText text={`Q${index + 1}: ${item.questionText.substring(0, 800)}`} /> 
+                     {/* Removed substring and ellipsis to allow full text wrapping, also removed md:truncate */}
                   </span>
                   <div className="flex items-center gap-2 mt-1 md:mt-0 flex-shrink-0 flex-wrap">
                     {item.marks !== undefined && <Badge variant="outline" className="flex items-center gap-1"><SigmaSquare className="h-3 w-3"/> {item.marks}</Badge>}
@@ -309,11 +312,11 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                   {item.questionType === 'mcq' && item.options && item.options.length > 0 && (
                     <div>
                       <strong><ListOrdered className="inline h-4 w-4 mr-1" />Options:</strong>
-                      <ul className="list-disc list-inside pl-4 space-y-1 mt-1">
+                      <ul className="list-none pl-4 space-y-1 mt-1"> {/* Changed to list-none for cleaner look with MathText */}
                         {item.options.map((opt, optIndex) => (
-                          <li key={`${item.id}-opt-${optIndex}`} >
+                          <li key={`${item.id}-opt-${optIndex}`} className="flex items-start"> {/* Flex for alignment */}
                              <MathText text={opt} className={`inline ${opt === item.answer ? 'text-green-600 dark:text-green-400 font-medium' : 'text-foreground/80'}`} />
-                            {opt === item.answer && <CheckCircle className="inline h-4 w-4 ml-2 text-green-600 dark:text-green-400" />}
+                            {opt === item.answer && <CheckCircle className="inline h-4 w-4 ml-2 text-green-600 dark:text-green-400 flex-shrink-0" />}
                           </li>
                         ))}
                       </ul>
