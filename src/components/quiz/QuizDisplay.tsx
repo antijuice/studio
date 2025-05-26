@@ -24,6 +24,18 @@ export function QuizDisplay({ quiz, showAnswersInitially = false }: QuizDisplayP
   const [answers, setAnswers] = useState<AnswerStateType>({});
   const [showResults, setShowResults] = useState(showAnswersInitially);
 
+  if (!quiz || quiz.questions.length === 0) {
+    return (
+      <Alert variant="destructive">
+        <MessageSquareWarning className="h-4 w-4" />
+        <AlertTitle>Quiz Error</AlertTitle>
+        <AlertDescription>
+          No questions found for this quiz. It might be empty or there was an issue loading it.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
   const currentQuestion = quiz.questions[currentQuestionIndex] as MCQType; // Assuming MCQ for now
 
   const handleOptionSelect = (questionId: string, selectedOption: string) => {
@@ -51,18 +63,6 @@ export function QuizDisplay({ quiz, showAnswersInitially = false }: QuizDisplayP
   const calculateScore = () => {
     return Object.values(answers).filter(a => a.isCorrect).length;
   };
-
-  if (!quiz || quiz.questions.length === 0) {
-    return (
-      <Alert variant="destructive">
-        <MessageSquareWarning className="h-4 w-4" />
-        <AlertTitle>Quiz Error</AlertTitle>
-        <AlertDescription>
-          No questions found for this quiz. It might be empty or there was an issue loading it.
-        </AlertDescription>
-      </Alert>
-    );
-  }
 
 
   if (showResults && !showAnswersInitially) { // Quiz submitted, show summary
@@ -106,12 +106,11 @@ export function QuizDisplay({ quiz, showAnswersInitially = false }: QuizDisplayP
 
   return (
     <div className="space-y-6">
-      <CardHeader className="p-0 mb-4">
+      <CardHeader> {/* Removed className="p-0 mb-4" to use default CardHeader styling */}
         <CardTitle className="text-xl flex items-center gap-2">
           <HelpCircle className="text-primary"/> Question {currentQuestionIndex + 1} of {quiz.questions.length}
         </CardTitle>
         <Separator className="my-2"/>
-        {/* This is the corrected line to display the question text */}
         <MathText text={currentQuestion.question} className="text-lg font-semibold text-foreground/90" />
       </CardHeader>
       
@@ -193,3 +192,4 @@ export function QuizDisplay({ quiz, showAnswersInitially = false }: QuizDisplayP
     </div>
   );
 }
+
