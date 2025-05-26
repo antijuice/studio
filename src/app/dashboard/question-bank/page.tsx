@@ -1,8 +1,7 @@
 
-
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -72,6 +71,11 @@ export default function QuestionBankPage() {
   const [currentQuiz, setCurrentQuiz] = useState<QuizType | null>(null);
   const [isGeneratingQuizByCriteria, setIsGeneratingQuizByCriteria] = useState(false);
 
+  // State for cycling through questions for "Start Quiz by Criteria"
+  const [shuffledPools, setShuffledPools] = useState<Map<string, string[]>>(new Map()); // criteriaKey -> shuffled question IDs
+  const [poolIndices, setPoolIndices] = useState<Map<string, number>>(new Map());     // criteriaKey -> current index in pool
+  const [lastCriteriaKeyForPool, setLastCriteriaKeyForPool] = useState<string | null>(null); // Tracks the last criteria key used to build/access a pool
+
 
   const uniqueCategories = React.useMemo(() => 
     Array.from(new Set(bankedQuestions.map(q => q.suggestedCategory))).sort(), 
@@ -103,7 +107,7 @@ export default function QuestionBankPage() {
   const handleCriteriaFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     if (e.target.id === 'criteriaCategory' || e.target.id === 'criteriaQuestionType') {
-      return;
+      return; // These are handled by handleCriteriaSelectChange
     }
     setCriteriaForm(prev => ({ ...prev, [name]: name === 'numQuestions' ? parseInt(value, 10) : value }));
   };
@@ -115,24 +119,30 @@ export default function QuestionBankPage() {
   const handleGenerateQuizByCriteria = () => {
     setIsGeneratingQuizByCriteria(true);
 
-    const criteriaTags = criteriaForm.tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
-    
-    let potentialQuestions = bankedQuestions.filter(q => {
-      if (q.questionType !== 'mcq') return false;
+    const criteriaKey = JSON.stringify({
+      description: criteriaForm.description.trim().toLowerCase(),
+      tags: criteriaForm.tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean).sort().join(','),
+      category: criteriaForm.category,
+      questionType: criteriaForm.questionType, // Should be 'mcq'
+    });
 
-      const matchesDescription = criteriaForm.description === '' ||
-        q.questionText.toLowerCase().includes(criteriaForm.description.toLowerCase()) ||
-        (q.explanation && q.explanation.toLowerCase().includes(criteriaForm.description.toLowerCase()));
+    const criteriaTagsArray = criteriaForm.tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
+    const allMatchingQuestions = bankedQuestions.filter(q => {
+      if (q.questionType !== 'mcq') return false; // Hard filter for MCQs for this feature
 
-      const matchesTags = criteriaTags.length === 0 || 
-        criteriaTags.every(ct => q.suggestedTags.some(qt => qt.toLowerCase().includes(ct)));
+      const matchesDescription = criteriaForm.description.trim() === '' ||
+        q.questionText.toLowerCase().includes(criteriaForm.description.trim().toLowerCase()) ||
+        (q.explanation && q.explanation.toLowerCase().includes(criteriaForm.description.trim().toLowerCase()));
+      
+      const matchesTags = criteriaTagsArray.length === 0 ||
+        criteriaTagsArray.every(ct => q.suggestedTags.some(qt => qt.toLowerCase().includes(ct)));
       
       const matchesCategory = criteriaForm.category === ALL_FILTER_VALUE || q.suggestedCategory === criteriaForm.category;
       
       return matchesDescription && matchesTags && matchesCategory;
     });
 
-    if (potentialQuestions.length === 0) {
+    if (allMatchingQuestions.length === 0) {
       toast({
         title: "No MCQs Found Matching Criteria",
         description: "No MCQs in the bank match your specified description, tags, or category. Try broadening your search.",
@@ -142,41 +152,103 @@ export default function QuestionBankPage() {
       return;
     }
 
-    const shuffled = potentialQuestions.sort(() => 0.5 - Math.random());
-    const selectedExtractedQuestions = shuffled.slice(0, criteriaForm.numQuestions);
+    let currentShuffledIds = shuffledPools.get(criteriaKey);
+    let currentIndex = poolIndices.get(criteriaKey) || 0;
+    let poolNeedsRebuild = false;
+
+    if (criteriaKey !== lastCriteriaKeyForPool || !currentShuffledIds) {
+      poolNeedsRebuild = true;
+    } else {
+      // Simple heuristic: if the number of matching questions has changed, rebuild pool for this criteria
+      if (allMatchingQuestions.length !== currentShuffledIds.length) {
+        poolNeedsRebuild = true;
+      }
+    }
+    
+    if (poolNeedsRebuild) {
+      currentShuffledIds = allMatchingQuestions.map(q => q.id).sort(() => 0.5 - Math.random()); // Shuffle
+      currentIndex = 0;
+      const newShuffledPools = new Map(shuffledPools);
+      newShuffledPools.set(criteriaKey, currentShuffledIds);
+      setShuffledPools(newShuffledPools);
+      if(criteriaKey !== lastCriteriaKeyForPool) setLastCriteriaKeyForPool(criteriaKey);
+    }
+    
+    if (!currentShuffledIds || currentShuffledIds.length === 0) {
+        toast({ title: "Error", description: "Question pool is empty for these criteria.", variant: "destructive" });
+        setIsGeneratingQuizByCriteria(false);
+        return;
+    }
+
+    const numAvailableInPool = currentShuffledIds.length;
+    const numToSelect = Math.min(criteriaForm.numQuestions, numAvailableInPool);
+    
+    const selectedQuestionIds: string[] = [];
+    for (let i = 0; i < numToSelect; i++) {
+      const poolReadIndex = (currentIndex + i) % numAvailableInPool;
+      selectedQuestionIds.push(currentShuffledIds[poolReadIndex]);
+    }
+
+    const newCurrentIndex = (currentIndex + numToSelect) % numAvailableInPool;
+
+    const newPoolIndices = new Map(poolIndices);
+    newPoolIndices.set(criteriaKey, newCurrentIndex);
+    setPoolIndices(newPoolIndices);
+
+    let cycledToastShown = false;
+    if (newCurrentIndex === 0 && (currentIndex + numToSelect >= numAvailableInPool) && numAvailableInPool > 0) {
+      // Just completed a full cycle. Re-shuffle for the *next* time.
+      const reShuffledIds = allMatchingQuestions.map(q => q.id).sort(() => 0.5 - Math.random());
+      const updatedShuffledPools = new Map(shuffledPools); // get latest
+      updatedShuffledPools.set(criteriaKey, reShuffledIds);
+      setShuffledPools(updatedShuffledPools);
+      
+      toast({
+        title: "Question Pool Cycled",
+        description: "All available questions for these criteria have been shown. The pool has been re-shuffled for next time.",
+        variant: "default",
+        duration: 3000,
+      });
+      cycledToastShown = true;
+    }
+
+    const selectedExtractedQuestions = selectedQuestionIds
+      .map(id => allMatchingQuestions.find(q => q.id === id)) // Get full question objects
+      .filter(Boolean) as ExtractedQuestion[];
 
     const mappedQuestions: MCQType[] = selectedExtractedQuestions.map(eq => ({
       id: eq.id,
       question: eq.questionText,
-      options: eq.options ? [...eq.options] : [], // Ensure it's a new array, or empty if options is undefined/null
-      answer: typeof eq.answer === 'string' ? eq.answer : "", // Ensure answer is a string, default to "" if not string (e.g. undefined/null)
+      options: eq.options ? [...eq.options] : [],
+      answer: typeof eq.answer === 'string' ? eq.answer : "",
       explanation: eq.explanation || "No explanation provided.",
-      type: 'mcq', // Explicitly set type
-    })).filter(q => q.options.length > 0 && q.answer.trim() !== ""); // Validate: must have options and a non-empty (trimmed) answer
+      type: 'mcq',
+    })).filter(q => q.options.length > 0 && q.answer.trim() !== "");
 
 
-    if (mappedQuestions.length < criteriaForm.numQuestions && mappedQuestions.length < selectedExtractedQuestions.length) {
-       toast({
-            title: "Some Matched Questions Invalid",
-            description: `Found ${selectedExtractedQuestions.length} MCQs matching your criteria, but only ${mappedQuestions.length} were complete (had options and a non-empty answer). The quiz will proceed with available valid questions.`,
-            variant: "default", 
-         });
+    if (mappedQuestions.length === 0) {
+      toast({
+        title: "Not Enough Valid MCQs",
+        description: `Although ${allMatchingQuestions.length} questions matched your criteria, none were complete (e.g., missing options or a defined answer) after validation. Please check the banked questions or broaden your criteria.`,
+        variant: "destructive",
+        duration: 7000,
+      });
+      setIsGeneratingQuizByCriteria(false);
+      return;
     }
     
-    if (mappedQuestions.length === 0) {
-         toast({
-            title: "Not Enough Valid MCQs",
-            description: `Could not create a quiz. Although ${potentialQuestions.length} MCQs matched your criteria, none were complete (e.g., missing options or a defined answer) after validation. Please check the banked questions or broaden your criteria.`,
-            variant: "destructive",
-            duration: 7000,
+    if (mappedQuestions.length < numToSelect && !cycledToastShown) {
+       toast({
+            title: "Some Matched Questions Invalid or Fewer Available",
+            description: `Found ${allMatchingQuestions.length} MCQs matching criteria. Generated a quiz with ${mappedQuestions.length} complete questions. Some might have been invalid or fewer were available than requested.`,
+            variant: "default", 
+            duration: 5000,
          });
-         setIsGeneratingQuizByCriteria(false);
-         return;
     }
     
     const newQuiz: QuizType = {
       id: `criteria-quiz-${Date.now()}`,
-      title: `Quiz: ${criteriaForm.description || 'Selected Criteria'}`,
+      title: `Quiz based on: ${criteriaForm.description || 'Selected Criteria'}`,
       questions: mappedQuestions,
       createdAt: new Date(),
     };
@@ -217,7 +289,7 @@ export default function QuestionBankPage() {
         </div>
       </header>
 
-      <Card className="shadow-lg sticky top-4 md:top-20 z-20 bg-card/95 backdrop-blur-sm">
+      <Card className="shadow-lg sticky top-4 md:top-20 z-20 bg-card/95 backdrop-blur-sm border">
         <CardHeader>
             <div className="flex justify-between items-center">
                 <CardTitle className="text-xl flex items-center gap-2"><PackagePlus className="h-6 w-6 text-accent"/>Quiz Assembly</CardTitle>
@@ -249,11 +321,11 @@ export default function QuestionBankPage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="text-xl flex items-center gap-2"><Wand2 className="h-6 w-6 text-primary"/>Start Quiz by Criteria</CardTitle>
-          <CardDescription>Generate a quiz from banked MCQs based on your specifications.</CardDescription>
+          <CardDescription>Generate a quiz from banked MCQs based on your specifications. The system will try to cycle through all matching questions before repeating.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label htmlFor="criteriaDescription">Description / Topic</Label>
+            <Label htmlFor="criteriaDescription">Description / Topic (searches question text & explanation)</Label>
             <Textarea 
               id="criteriaDescription" 
               name="description" 
@@ -265,7 +337,7 @@ export default function QuestionBankPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="criteriaTags">Tags (comma-separated)</Label>
+              <Label htmlFor="criteriaTags">Tags (comma-separated, matches if ALL tags present)</Label>
               <Input 
                 id="criteriaTags" 
                 name="tags" 
@@ -297,13 +369,14 @@ export default function QuestionBankPage() {
                 name="questionType" 
                 value={criteriaForm.questionType} 
                 onValueChange={(value) => handleCriteriaSelectChange('questionType', value)}
+                disabled // For now, this feature primarily targets MCQs from the bank
               >
                 <SelectTrigger id="criteriaQuestionType" className="mt-1"><SelectValue placeholder="Any MCQ Type" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="mcq">Multiple Choice (Recommended)</SelectItem>
+                  <SelectItem value="mcq">Multiple Choice (MCQ)</SelectItem>
                 </SelectContent>
               </Select>
-               <p className="text-xs text-muted-foreground mt-1">Currently, only MCQs are recommended for reliable quiz generation.</p>
+               <p className="text-xs text-muted-foreground mt-1">Currently, only MCQs are used for quiz generation by criteria.</p>
             </div>
             <div>
               <Label htmlFor="criteriaNumQuestions">Number of Questions</Label>
@@ -386,7 +459,7 @@ export default function QuestionBankPage() {
                       <div className="flex justify-between items-start">
                           <div className="text-lg flex items-start gap-2 flex-1 min-w-0">
                               <QuestionTypeIcon type={question.questionType} />
-                               <MathText text={question.questionText} className="font-medium" />
+                               <MathText text={question.questionText} className="font-medium block" />
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
                               {question.marks !== undefined && (
@@ -500,3 +573,6 @@ export default function QuestionBankPage() {
     </TooltipProvider>
   );
 }
+
+
+    
