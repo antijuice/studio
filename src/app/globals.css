@@ -17,8 +17,8 @@ body {
     --popover: 220 10% 15%; /* Even darker for popovers */
     --popover-foreground: 220 10% 90%;
 
-    --primary: 271 100% 25.3%; /* Deep Indigo (Unchanged) */
-    --primary-foreground: 271 80% 90%; /* Lighter contrast for primary (Unchanged) */
+    --primary: 271 80% 60%; /* Brighter Purple for better contrast */
+    --primary-foreground: 0 0% 10%; /* Dark Grey/Black for text on new primary */
 
     --secondary: 271 50% 35%; /* A less intense version of primary or related color (Unchanged) */
     --secondary-foreground: 271 50% 90%; /* (Unchanged) */
@@ -66,3 +66,4 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
