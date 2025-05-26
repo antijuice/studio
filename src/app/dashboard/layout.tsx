@@ -108,9 +108,14 @@ function SidebarDecorated({ children }: { children: React.ReactNode }) {
       <Sidebar collapsible="icon" variant="sidebar">
         <SidebarHeader className="p-4">
           <div className="flex items-center gap-3">
-             <Button variant="ghost" size="icon" className="md:hidden" onClick={toggleSidebar}>
-                <SidebarTrigger />
-             </Button>
+            {/* 
+              The SidebarTrigger component already renders a Button.
+              It defaults to variant="ghost" and size="icon", and handles toggleSidebar.
+              The className "md:hidden" preserves the mobile-only visibility.
+              "h-10 w-10" is added to maintain the size implied by the original outer Button's size="icon",
+              overriding SidebarTrigger's internal h-7 w-7 default styling.
+            */}
+            <SidebarTrigger className="md:hidden h-10 w-10" />
             <BotMessageSquare className="w-8 h-8 text-primary" />
             <h1 className={`text-xl font-semibold text-primary transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0 md:opacity-0 group-data-[collapsible=icon]:hidden'}`}>
               QuelprQuiz
