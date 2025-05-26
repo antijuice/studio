@@ -106,12 +106,14 @@ export function QuizDisplay({ quiz, showAnswersInitially = false }: QuizDisplayP
 
   return (
     <div className="space-y-6">
-      <CardHeader> {/* Removed className="p-0 mb-4" to use default CardHeader styling */}
+      <CardHeader>
         <CardTitle className="text-xl flex items-center gap-2">
           <HelpCircle className="text-primary"/> Question {currentQuestionIndex + 1} of {quiz.questions.length}
         </CardTitle>
         <Separator className="my-2"/>
-        <MathText text={currentQuestion.question} className="text-lg font-semibold text-foreground/90" />
+        <div className="min-h-[1.5em]"> {/* Ensure container for question text has some height */}
+          <MathText text={currentQuestion.question} className="block text-lg font-semibold text-foreground/90" />
+        </div>
       </CardHeader>
       
       {currentQuestion.options && Array.isArray(currentQuestion.options) ? (
