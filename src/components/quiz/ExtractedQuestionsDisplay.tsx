@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import type { ExtractQuestionsFromPdfOutput, ExtractedQuestion, SaveQuestionToBankOutput, SuggestMcqAnswerInput, SuggestMcqAnswerOutput } from '@/lib/types';
+import type { ExtractedQuestion as AIExtractedQuestion, ExtractQuestionsFromPdfOutput as AIExtractQuestionsOutput, SaveQuestionToBankOutput, SuggestMcqAnswerInput, SuggestMcqAnswerOutput } from '@/lib/types'; // Use AI types here
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
-import { BookText, CheckCircle, Edit, ImageIcon, Info, Lightbulb, ListOrdered, Save, Tag, Type, XCircle, Loader2, SigmaSquare, Filter, TagsIcon, AlertTriangle } from 'lucide-react';
+import { BookText, CheckCircle, Edit, ImageIcon, Info, Lightbulb, ListOrdered, Save, Tag, Type, XCircle, Loader2, SigmaSquare, Filter, TagsIcon, AlertTriangle, WandSparkles } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from '@/hooks/use-toast';
 import { saveQuestionToBankAction, suggestMcqAnswerAction } from '@/app/actions/quizActions';
@@ -21,8 +21,11 @@ import { MathText } from '../ui/MathText';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { useQuestionBank } from '@/contexts/QuestionBankContext';
 
+// Re-define ExtractedQuestion type to include the client-side `id`
+type ExtractedQuestion = AIExtractedQuestion & { id: string };
+
 interface ExtractedQuestionsDisplayProps {
-  extractionResult: ExtractQuestionsFromPdfOutput;
+  extractionResult: { extractedQuestions: ExtractedQuestion[] }; // Ensure this matches the type from action
 }
 
 const questionTypeLabels: Record<ExtractedQuestion['questionType'], string> = {
@@ -41,6 +44,7 @@ type QuestionSaveStateType = {
   }
 };
 
+// This will be used for the edit dialog's state
 type EditableQuestionData = Omit<ExtractedQuestion, 'id' | 'questionType'> & {
   id?: string; 
   questionType?: ExtractedQuestion['questionType']; 
@@ -50,25 +54,50 @@ type EditableQuestionData = Omit<ExtractedQuestion, 'id' | 'questionType'> & {
 export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestionsDisplayProps) {
   const { toast } = useToast();
   const { addQuestionToBank } = useQuestionBank();
+  
+  const [editableQuestions, setEditableQuestions] = useState<ExtractedQuestion[]>([]);
   const [saveStates, setSaveStates] = useState<QuestionSaveStateType>({});
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
   const [tagSearchTerm, setTagSearchTerm] = useState('');
+  
   const [isSavingAll, setIsSavingAll] = useState(false);
+  const [isSuggestingAllAnswers, setIsSuggestingAllAnswers] = useState(false);
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [currentQuestionForEdit, setCurrentQuestionForEdit] = useState<ExtractedQuestion | null>(null);
-  const [editedData, setEditedData] = useState<Partial<EditableQuestionData>>({});
-  const [isSuggestingAnswer, setIsSuggestingAnswer] = useState(false);
+  const [editedData, setEditedData] = useState<Partial<EditableQuestionData>>({}); // Use Partial for initial state
+  const [isSuggestingAnswerInDialog, setIsSuggestingAnswerInDialog] = useState(false);
 
+  useEffect(() => {
+    // Initialize or reset editableQuestions when extractionResult changes
+    if (extractionResult && extractionResult.extractedQuestions) {
+      setEditableQuestions(extractionResult.extractedQuestions);
+      // Reset save states if a new batch of questions is loaded
+      setSaveStates({}); 
+    }
+  }, [extractionResult]);
 
   useEffect(() => {
     if (currentQuestionForEdit) {
-      setEditedData({ ...currentQuestionForEdit });
+      // Ensure all fields are present, defaulting if necessary
+      setEditedData({
+        questionText: currentQuestionForEdit.questionText || '',
+        questionType: currentQuestionForEdit.questionType,
+        options: currentQuestionForEdit.options ? [...currentQuestionForEdit.options] : [],
+        answer: currentQuestionForEdit.answer || '',
+        explanation: currentQuestionForEdit.explanation || '',
+        suggestedTags: currentQuestionForEdit.suggestedTags ? [...currentQuestionForEdit.suggestedTags] : [],
+        suggestedCategory: currentQuestionForEdit.suggestedCategory || '',
+        marks: currentQuestionForEdit.marks,
+        relevantImageDescription: currentQuestionForEdit.relevantImageDescription || '',
+      });
     } else {
       setEditedData({});
     }
   }, [currentQuestionForEdit]);
+
 
   const handleInputChange = (field: keyof EditableQuestionData, value: any) => {
     setEditedData(prev => ({ ...prev, [field]: value }));
@@ -84,15 +113,14 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     setEditedData(prev => ({ ...prev, answer: value }));
   };
 
-
   const uniqueCategories = useMemo(() => {
-    if (!extractionResult || !extractionResult.extractedQuestions) return [];
-    const categories = new Set(extractionResult.extractedQuestions.map(q => q.suggestedCategory));
+    if (!editableQuestions) return [];
+    const categories = new Set(editableQuestions.map(q => q.suggestedCategory));
     return Array.from(categories).sort();
-  }, [extractionResult]);
+  }, [editableQuestions]);
 
   const filteredQuestions = useMemo(() => {
-    if (!extractionResult || !extractionResult.extractedQuestions) return [];
+    if (!editableQuestions) return [];
     
     const searchTagsArray = tagSearchTerm
       .toLowerCase()
@@ -100,7 +128,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       .map(tag => tag.trim())
       .filter(tag => tag !== '');
 
-    return extractionResult.extractedQuestions.filter(question => {
+    return editableQuestions.filter(question => {
       const matchesSearchTerm = searchTerm === '' || 
         question.questionText.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (question.explanation && question.explanation.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -115,18 +143,20 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
 
       return matchesSearchTerm && matchesCategory && matchesTags;
     });
-  }, [extractionResult, searchTerm, selectedCategoryFilter, tagSearchTerm]);
-
+  }, [editableQuestions, searchTerm, selectedCategoryFilter, tagSearchTerm]);
+  
   const unsavedFilteredQuestions = useMemo(() => {
     return filteredQuestions.filter(q => !saveStates[q.id]?.isSaved);
   }, [filteredQuestions, saveStates]);
 
   const triggerSaveProcess = useCallback(async (questionToSave: ExtractedQuestion): Promise<boolean> => {
     setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: true, isSaved: false } }));
+    
+    // Only show individual toast if not part of "Save All"
     if (!isSavingAll) {
       toast({
         title: "Saving Question...",
-        description: `Attempting to save question to the bank.`,
+        description: `Attempting to save question "${questionToSave.questionText.substring(0,30)}..." to bank.`,
       });
     }
 
@@ -138,7 +168,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
         if (!isSavingAll) {
           toast({
             title: "Question Saved",
-            description: result.message || `Question with ID ${result.questionId} saved.`,
+            description: result.message || `Question "${questionToSave.questionText.substring(0,30)}..." saved.`,
           });
         }
         return true;
@@ -165,11 +195,14 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       }
       return false;
     }
-  }, [toast, addQuestionToBank, isSavingAll]);
+  }, [toast, addQuestionToBank, isSavingAll]); // isSavingAll added to dependencies
 
-  const handleOpenEditDialog = (question: ExtractedQuestion) => {
-    setCurrentQuestionForEdit(question);
-    setIsEditDialogOpen(true);
+  const handleOpenEditDialog = (questionId: string) => {
+    const question = editableQuestions.find(q => q.id === questionId);
+    if (question) {
+      setCurrentQuestionForEdit(question);
+      setIsEditDialogOpen(true);
+    }
   };
 
   const handleConfirmSaveFromDialog = async () => {
@@ -179,7 +212,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     }
     
     const questionToSave: ExtractedQuestion = {
-      ...currentQuestionForEdit,
+      ...currentQuestionForEdit, // Base with original ID
       questionText: editedData.questionText || currentQuestionForEdit.questionText,
       options: editedData.options || currentQuestionForEdit.options,
       answer: editedData.answer || currentQuestionForEdit.answer,
@@ -190,14 +223,19 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       suggestedCategory: editedData.suggestedCategory || currentQuestionForEdit.suggestedCategory,
       marks: editedData.marks !== undefined ? Number(editedData.marks) : currentQuestionForEdit.marks,
       relevantImageDescription: editedData.relevantImageDescription || currentQuestionForEdit.relevantImageDescription,
+      questionType: editedData.questionType || currentQuestionForEdit.questionType, // ensure type is preserved
     };
 
     setIsEditDialogOpen(false); 
-    await triggerSaveProcess(questionToSave);
+    const success = await triggerSaveProcess(questionToSave);
+    if (success) {
+      // Update the item in editableQuestions as well if needed, though save state handles display
+       setEditableQuestions(prev => prev.map(q => q.id === questionToSave.id ? questionToSave : q));
+    }
     setCurrentQuestionForEdit(null); 
   };
 
-  const handleSaveAll = async () => {
+  const handleSaveAllUnsaved = async () => {
     if (unsavedFilteredQuestions.length === 0) {
         toast({
             title: "Nothing to Save",
@@ -215,8 +253,11 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     let successCount = 0;
     let failureCount = 0;
     
+    // Use the current state of questions from editableQuestions that match the unsavedFilteredQuestions ids
+    const questionsToProcess = editableQuestions.filter(eq => unsavedFilteredQuestions.some(ufq => ufq.id === eq.id));
+
     const results = await Promise.allSettled(
-      unsavedFilteredQuestions.map(q => triggerSaveProcess(q))
+      questionsToProcess.map(q => triggerSaveProcess(q))
     );
 
     results.forEach(result => {
@@ -235,13 +276,13 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
         duration: 5000,
     });
   };
-
-  const handleAISuggestAnswer = async () => {
+  
+  const handleAISuggestAnswerInDialog = async () => {
     if (!currentQuestionForEdit || !editedData.questionText || !editedData.options || editedData.options.length === 0) {
       toast({ title: "Cannot Suggest", description: "Question text and options must be available to suggest an answer.", variant: "destructive" });
       return;
     }
-    setIsSuggestingAnswer(true);
+    setIsSuggestingAnswerInDialog(true);
     toast({ title: "AI Suggestion", description: "AI is thinking of an answer..." });
     try {
       const input: SuggestMcqAnswerInput = {
@@ -259,18 +300,80 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       const errorMessage = error instanceof Error ? error.message : "Unknown error suggesting answer.";
       toast({ title: "AI Suggestion Failed", description: errorMessage, variant: "destructive" });
     } finally {
-      setIsSuggestingAnswer(false);
+      setIsSuggestingAnswerInDialog(false);
     }
   };
 
+  const handleSuggestAllMissingAnswers = async () => {
+    const mcqsWithoutAnswers = filteredQuestions.filter(q => 
+      q.questionType === 'mcq' && 
+      (!q.answer || q.answer.trim() === '' || (q.options && !q.options.includes(q.answer)))
+    );
 
-  if (!extractionResult || extractionResult.extractedQuestions.length === 0) {
+    if (mcqsWithoutAnswers.length === 0) {
+      toast({ title: "No Action Needed", description: "All filtered MCQs already have answers or no MCQs to suggest for." });
+      return;
+    }
+
+    setIsSuggestingAllAnswers(true);
+    toast({ title: "AI Suggesting Answers...", description: `Attempting to suggest answers for ${mcqsWithoutAnswers.length} MCQs.` });
+
+    let successCount = 0;
+    let failureCount = 0;
+
+    const suggestionsPromises = mcqsWithoutAnswers.map(async (question) => {
+      if (!question.options || question.options.length === 0) {
+        return { id: question.id, error: "No options available" };
+      }
+      try {
+        const result = await suggestMcqAnswerAction({ questionText: question.questionText, options: question.options });
+        return { id: question.id, suggestedAnswer: result.suggestedAnswer };
+      } catch (error) {
+        return { id: question.id, error: error instanceof Error ? error.message : "Unknown error" };
+      }
+    });
+
+    const results = await Promise.allSettled(suggestionsPromises);
+
+    setEditableQuestions(currentEditableQuestions => {
+      const newEditableQuestions = [...currentEditableQuestions];
+      results.forEach(settledResult => {
+        if (settledResult.status === 'fulfilled') {
+          const { id, suggestedAnswer, error } = settledResult.value;
+          if (suggestedAnswer) {
+            const questionIndex = newEditableQuestions.findIndex(q => q.id === id);
+            if (questionIndex !== -1) {
+              newEditableQuestions[questionIndex] = { ...newEditableQuestions[questionIndex], answer: suggestedAnswer };
+              successCount++;
+            }
+          } else {
+            failureCount++;
+            console.error(`Failed to suggest answer for ${id}: ${error}`);
+          }
+        } else {
+          failureCount++;
+          console.error(`Promise rejected for an AI suggestion: ${settledResult.reason}`);
+        }
+      });
+      return newEditableQuestions;
+    });
+    
+    toast({
+      title: "AI Answer Suggestion Complete",
+      description: `${successCount} answer(s) suggested. ${failureCount > 0 ? `${failureCount} failed.` : ''}`,
+      variant: failureCount > 0 && successCount === 0 ? "destructive" : "default",
+    });
+    setIsSuggestingAllAnswers(false);
+  };
+
+
+  if (!editableQuestions || editableQuestions.length === 0) {
     return (
       <Alert>
         <Info className="h-4 w-4" />
         <AlertTitle>No Questions Extracted</AlertTitle>
         <AlertDescription>
-          The AI could not find any questions in the provided PDF, or the PDF might be empty.
+          The AI could not find any questions in the provided PDF, the PDF might be empty, or the extraction result is still loading.
         </AlertDescription>
       </Alert>
     );
@@ -327,9 +430,22 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
           </div>
         </div>
         <Separator className="my-4" />
-        <div className="flex justify-end">
+        <div className="flex flex-col sm:flex-row justify-end gap-2">
+             <Button
+                onClick={handleSuggestAllMissingAnswers}
+                disabled={isSuggestingAllAnswers || filteredQuestions.filter(q => q.questionType === 'mcq' && (!q.answer || q.answer.trim() === '')).length === 0}
+                variant="outline"
+                size="sm"
+            >
+                {isSuggestingAllAnswers ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                    <WandSparkles className="mr-2 h-4 w-4" />
+                )}
+                {isSuggestingAllAnswers ? "Suggesting Answers..." : `AI Suggest All Missing Answers (${filteredQuestions.filter(q => q.questionType === 'mcq' && (!q.answer || q.answer.trim() === '')).length})`}
+            </Button>
             <Button
-                onClick={handleSaveAll}
+                onClick={handleSaveAllUnsaved}
                 disabled={isSavingAll || unsavedFilteredQuestions.length === 0}
                 variant="default"
                 size="sm"
@@ -363,7 +479,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
               <AccordionTrigger className="hover:no-underline text-left">
                 <div className="flex flex-col md:flex-row md:items-start justify-between w-full pr-2">
                    <div className="font-semibold flex-1 mr-2 min-w-0">
-                      <MathText text={`Q${index + 1}: ${item.questionText}`} className="text-base" />
+                      <MathText text={`Q${index + 1}: ${item.questionText}`} className="text-base block" />
                   </div>
                   <div className="flex items-center gap-2 mt-1 md:mt-0 flex-shrink-0 flex-wrap">
                     {item.marks !== undefined && <Badge variant="outline" className="flex items-center gap-1"><SigmaSquare className="h-3 w-3"/> {item.marks}</Badge>}
@@ -378,7 +494,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                   <div className="flex justify-between items-start">
                       <div>
                         <p className="font-semibold flex items-start gap-1.5"><BookText className="inline h-4 w-4 mr-1 mt-1 flex-shrink-0" />Question Text:</p>
-                        <MathText text={item.questionText} className="ml-6 prose prose-sm dark:prose-invert max-w-none"/>
+                        <MathText text={item.questionText} className="ml-6 prose prose-sm dark:prose-invert max-w-none block"/>
                         {item.marks !== undefined && (
                           <p className="text-sm text-muted-foreground mt-1 ml-6">
                             <strong><SigmaSquare className="inline h-4 w-4 mr-1" />Marks:</strong> {item.marks}
@@ -388,7 +504,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                       <Button 
                           variant={currentSaveState.isSaved ? "default" : "outline"}
                           size="sm" 
-                          onClick={() => handleOpenEditDialog(item)}
+                          onClick={() => handleOpenEditDialog(item.id)}
                           className={`ml-4 flex-shrink-0 ${currentSaveState.isSaved ? "bg-green-600 hover:bg-green-700 text-white" : ""}`}
                           disabled={currentSaveState.isLoading || currentSaveState.isSaved}
                       >
@@ -399,7 +515,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                           ) : (
                             <Edit className="mr-2 h-3 w-3" />
                           )}
-                          {currentSaveState.isLoading ? "Saving..." : currentSaveState.isSaved ? "Saved" : "Review &amp; Save"}
+                          {currentSaveState.isLoading ? "Saving..." : currentSaveState.isSaved ? "Saved" : "Review & Save"}
                       </Button>
                   </div>
                   
@@ -475,7 +591,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
           setIsEditDialogOpen(open);
           if (!open) {
             setCurrentQuestionForEdit(null);
-            setIsSuggestingAnswer(false); // Reset suggestion loading state
+            setIsSuggestingAnswerInDialog(false); // Reset suggestion loading state
           }
         }}>
           <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
@@ -491,7 +607,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                 <Textarea id="editText" value={editedData.questionText || ''} onChange={(e) => handleInputChange('questionText', e.target.value)} className="mt-1 min-h-[100px]" />
               </div>
 
-              {currentQuestionForEdit.questionType === 'mcq' && (
+              {editedData.questionType === 'mcq' && (
                 <>
                   <div>
                     <Label className="font-semibold">Options &amp; Correct Answer</Label>
@@ -514,18 +630,18 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                      <Button 
                         variant="outline" 
                         size="sm" 
-                        onClick={handleAISuggestAnswer} 
-                        disabled={isSuggestingAnswer || !editedData.questionText}
+                        onClick={handleAISuggestAnswerInDialog} 
+                        disabled={isSuggestingAnswerInDialog || !editedData.questionText}
                         className="mt-2 w-full"
                       >
-                        {isSuggestingAnswer ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lightbulb className="mr-2 h-4 w-4" />}
-                        {isSuggestingAnswer ? "Suggesting..." : "AI Suggest Answer"}
+                        {isSuggestingAnswerInDialog ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lightbulb className="mr-2 h-4 w-4" />}
+                        {isSuggestingAnswerInDialog ? "Suggesting..." : "AI Suggest Answer"}
                       </Button>
                   )}
                 </>
               )}
               
-              {currentQuestionForEdit.questionType !== 'mcq' && (
+              {editedData.questionType !== 'mcq' && (
                  <div>
                     <Label htmlFor="editAnswer" className="font-semibold">Answer</Label>
                     <Textarea id="editAnswer" value={editedData.answer || ''} onChange={(e) => handleInputChange('answer', e.target.value)} className="mt-1" />
