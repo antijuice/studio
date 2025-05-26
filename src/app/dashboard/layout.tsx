@@ -45,7 +45,8 @@ import { Separator } from '@/components/ui/separator';
 import React, { useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { QuestionBankProvider } from '@/contexts/QuestionBankContext';
-import { QuizAssemblyProvider } from '@/contexts/QuizAssemblyContext'; // Added import
+import { QuizAssemblyProvider } from '@/contexts/QuizAssemblyContext';
+import { QuizSessionProvider } from '@/contexts/QuizSessionContext'; // Added import
 
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
@@ -90,15 +91,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
   
   return (
-    <QuestionBankProvider>
-      <QuizAssemblyProvider> {/* Added Provider */}
-        <SidebarProvider defaultOpen>
-          <SidebarDecorated>
-            <SidebarInset className="overflow-x-hidden overflow-y-auto">{children}</SidebarInset>
-          </SidebarDecorated>
-        </SidebarProvider>
-      </QuizAssemblyProvider>
-    </QuestionBankProvider>
+    <QuizSessionProvider> {/* Added Provider */}
+      <QuestionBankProvider>
+        <QuizAssemblyProvider> 
+          <SidebarProvider defaultOpen>
+            <SidebarDecorated>
+              <SidebarInset className="overflow-x-hidden overflow-y-auto">{children}</SidebarInset>
+            </SidebarDecorated>
+          </SidebarProvider>
+        </QuizAssemblyProvider>
+      </QuestionBankProvider>
+    </QuizSessionProvider>
   );
 }
 
@@ -225,8 +228,10 @@ function SidebarDecorated({ children }: { children: React.ReactNode }) {
         </SidebarFooter>
       </Sidebar>
       
-      {children} 
+      {/* The SidebarInset is the main content area */}
+      <div className="flex-1 md:ml-[var(--sidebar-width)] group-data-[state=collapsed]:md:ml-[var(--sidebar-width-icon)] transition-[margin-left] duration-200 ease-linear">
+        {children}
+      </div>
     </>
   );
 }
-

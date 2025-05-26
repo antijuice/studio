@@ -23,7 +23,7 @@ export type Question = MCQ | ShortAnswerQuestion;
 export type Quiz = {
   id: string;
   title: string;
-  questions: Question[];
+  questions: Question[]; // Array of MCQ or ShortAnswerQuestion
   subject?: string;
   topic?: string;
   syllabus?: string;
@@ -40,7 +40,7 @@ export type UserProfile = {
   experiencePoints: number;
   level: number;
   badges: Badge[];
-  quizHistory: QuizSession[];
+  quizHistory: QuizSession[]; // This will be populated from context/DB
 };
 
 export type Badge = {
@@ -51,20 +51,30 @@ export type Badge = {
   achievedDate: Date;
 };
 
-export type QuizSession = {
-  id: string;
-  quizId: string;
-  quizTitle: string;
-  score: number;
-  completedAt: Date;
-  answers: UserAnswer[];
-};
-
+// Updated UserAnswer to include more context for review
 export type UserAnswer = {
   questionId: string;
-  answer: string | string[]; // string for MCQ, string[] for multiple select or ordered short answer parts
-  isCorrect?: boolean;
+  questionText: string; // Original question text
+  questionType: Question['type'];
+  options?: string[]; // Original options for MCQ
+  userSelection?: string; // User's selected option string for MCQ
+  correctAnswer: string; // Correct answer string
+  explanation?: string; // Original explanation
+  isCorrect: boolean;
 };
+
+export type QuizSession = {
+  id: string; // Unique ID for this session
+  quizId: string; // ID of the Quiz object taken
+  quizTitle: string;
+  score: number; // Percentage
+  completedAt: Date;
+  answers: UserAnswer[]; // Detailed record of answers
+  subject?: string; // Copied from quiz for display convenience
+  topic?: string; // Copied from quiz for display convenience
+  type?: Question['type'] | 'mixed' | 'pdf-generated' | 'custom'; // General type of quiz
+};
+
 
 // For AI generated quiz from custom input (matching AI flow output)
 export type CustomQuizGenOutput = {
@@ -87,10 +97,8 @@ export type ShortAnswerEvaluationOutput = {
   feedback: string;
 };
 
-// For AI extracted questions from PDF (matching AI flow output)
-// Adding a unique identifier for client-side state management
 export type ExtractedQuestion = {
-  id: string; // Added for local state management
+  id: string; 
   questionText: string;
   questionType: 'mcq' | 'short_answer' | 'true_false' | 'fill_in_the_blank' | 'unknown';
   options?: string[];
@@ -99,7 +107,7 @@ export type ExtractedQuestion = {
   suggestedTags: string[];
   suggestedCategory: string;
   relevantImageDescription?: string;
-  marks?: number; // Added marks field
+  marks?: number;
 };
 
 export type ExtractQuestionsFromPdfOutput = {
@@ -126,23 +134,20 @@ export type ShortAnswerFormParams = {
   modelAnswer?: string;
 };
 
-// For the new extract questions flow input
 export type ExtractQuestionsFromPdfInput = {
   pdfDataUri: string;
   topicHint?: string;
-  globalTags?: string; // Comma-separated tags
-  autoSuggestMcqAnswers?: boolean; // New field
-  autoSuggestExplanations?: boolean; // New field
+  globalTags?: string; 
+  autoSuggestMcqAnswers?: boolean; 
+  autoSuggestExplanations?: boolean; 
 };
 
-// Output for saving a question to the bank (can be expanded later)
 export type SaveQuestionToBankOutput = {
   success: boolean;
-  questionId?: string; // ID of the saved question in the bank
+  questionId?: string; 
   message: string;
 };
 
-// For AI suggesting an MCQ answer
 export type SuggestMcqAnswerInput = {
   questionText: string;
   options: string[];
@@ -152,12 +157,11 @@ export type SuggestMcqAnswerOutput = {
   suggestedAnswer: string;
 };
 
-// For AI suggesting an explanation
 export type SuggestExplanationInput = {
   questionText: string;
   questionType: ExtractedQuestion['questionType'];
-  options?: string[]; // Relevant for MCQs
-  answer?: string;    // The known correct answer, if available
+  options?: string[]; 
+  answer?: string;    
 };
 
 export type SuggestExplanationOutput = {
