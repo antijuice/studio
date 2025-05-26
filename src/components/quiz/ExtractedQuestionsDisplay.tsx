@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import type { ExtractedQuestion as AIExtractedQuestion, ExtractQuestionsFromPdfOutput as AIExtractQuestionsOutput, SaveQuestionToBankOutput, SuggestMcqAnswerInput, SuggestMcqAnswerOutput, SuggestExplanationInput, SuggestExplanationOutput } from '@/lib/types'; // Use AI types here
+import type { ExtractedQuestion as AIExtractedQuestion, SaveQuestionToBankOutput, SuggestMcqAnswerInput, SuggestMcqAnswerOutput, SuggestExplanationInput, SuggestExplanationOutput } from '@/lib/types'; // Use AI types here
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import { BookText, CheckCircle, Edit, ImageIcon, Info, Lightbulb, ListOrdered, Save, Tag, Type, XCircle, Loader2, SigmaSquare, Filter, TagsIcon, AlertTriangle, WandSparkles } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from '@/hooks/use-toast';
@@ -53,7 +53,7 @@ type EditableQuestionData = Omit<ExtractedQuestion, 'id' | 'questionType'> & {
 
 export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestionsDisplayProps) {
   const { toast } = useToast();
-  const { addQuestionToBank } = useQuestionBank();
+  const { bankedQuestions, addQuestionToBank } = useQuestionBank();
 
   const [editableQuestions, setEditableQuestions] = useState<ExtractedQuestion[]>([]);
   const [saveStates, setSaveStates] = useState<QuestionSaveStateType>({});
@@ -76,9 +76,17 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   useEffect(() => {
     if (extractionResult && extractionResult.extractedQuestions) {
       setEditableQuestions(extractionResult.extractedQuestions);
-      setSaveStates({}); // Reset save states when new extraction results come in
+      const initialSaveStates: QuestionSaveStateType = {};
+      extractionResult.extractedQuestions.forEach(eq => {
+        if (bankedQuestions.some(bq => bq.id === eq.id)) {
+          initialSaveStates[eq.id] = { isLoading: false, isSaved: true };
+        } else {
+          initialSaveStates[eq.id] = { isLoading: false, isSaved: false };
+        }
+      });
+      setSaveStates(initialSaveStates);
     }
-  }, [extractionResult]);
+  }, [extractionResult, bankedQuestions]);
 
   useEffect(() => {
     if (currentQuestionForEdit) {
@@ -611,7 +619,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                       size="sm"
                       onClick={() => handleOpenEditDialog(item.id)}
                       className={`ml-4 flex-shrink-0 ${currentSaveState.isSaved ? "bg-green-600 hover:bg-green-700 text-white" : ""}`}
-                      disabled={currentSaveState.isLoading || currentSaveState.isSaved}
+                      disabled={currentSaveState.isLoading}
                     >
                       {currentSaveState.isLoading ? (
                         <Loader2 className="mr-2 h-3 w-3 animate-spin" />
@@ -620,7 +628,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                       ) : (
                         <Edit className="mr-2 h-3 w-3" />
                       )}
-                      {currentSaveState.isLoading ? "Saving..." : currentSaveState.isSaved ? "Saved" : "Review & Save"}
+                      {currentSaveState.isLoading ? "Processing..." : currentSaveState.isSaved ? "Saved (Edit)" : "Review &amp; Save"}
                     </Button>
                   </div>
 
