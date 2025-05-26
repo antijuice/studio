@@ -103,6 +103,9 @@ export function QuizDisplay({ quiz, showAnswersInitially = false }: QuizDisplayP
     );
   }
 
+  const questionTextContent = currentQuestion.question && currentQuestion.question.trim() !== ''
+    ? <MathText text={currentQuestion.question} className="block text-lg font-semibold text-foreground/90" />
+    : <p className="text-lg font-semibold text-muted-foreground italic">(No question text provided)</p>;
 
   return (
     <div className="space-y-6">
@@ -112,7 +115,7 @@ export function QuizDisplay({ quiz, showAnswersInitially = false }: QuizDisplayP
         </CardTitle>
         <Separator className="my-2"/>
         <div className="min-h-[1.5em]"> {/* Ensure container for question text has some height */}
-          <MathText text={currentQuestion.question} className="block text-lg font-semibold text-foreground/90" />
+          {questionTextContent}
         </div>
       </CardHeader>
       
@@ -194,4 +197,3 @@ export function QuizDisplay({ quiz, showAnswersInitially = false }: QuizDisplayP
     </div>
   );
 }
-
