@@ -59,14 +59,11 @@ export default function QuestionBankPage() {
   } = useQuizAssembly();
   const { toast } = useToast();
 
-  // Filters for browsing the bank
   const [searchTerm, setSearchTerm] = React.useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = React.useState(ALL_FILTER_VALUE);
   const [selectedTypeFilter, setSelectedTypeFilter] = React.useState(ALL_FILTER_VALUE);
   const [tagSearchTerm, setTagSearchTerm] = useState('');
 
-
-  // State for "Start Quiz by Criteria"
   const [criteriaForm, setCriteriaForm] = useState<CriteriaQuizFormState>({
     description: '',
     tags: '',
@@ -77,15 +74,12 @@ export default function QuestionBankPage() {
   const [currentQuiz, setCurrentQuiz] = useState<QuizType | null>(null);
   const [isGeneratingQuizByCriteria, setIsGeneratingQuizByCriteria] = useState(false);
 
-  // State for managing question pools for criteria-based quizzes
-  const [shuffledPools, setShuffledPools] = useState<Map<string, string[]>>(new Map()); // Map<criteriaKey, questionId[]>
-  const [poolIndices, setPoolIndices] = useState<Map<string, number>>(new Map()); // Map<criteriaKey, currentIndex>
+  const [shuffledPools, setShuffledPools] = useState<Map<string, string[]>>(new Map());
+  const [poolIndices, setPoolIndices] = useState<Map<string, number>>(new Map());
   const [lastCriteriaKeyForPool, setLastCriteriaKeyForPool] = useState<string | null>(null);
 
-  // State for View Details Dialog
   const [isViewDetailsDialogOpen, setIsViewDetailsDialogOpen] = useState(false);
   const [currentQuestionForView, setCurrentQuestionForView] = useState<ExtractedQuestion | null>(null);
-
 
   const uniqueCategories = React.useMemo(() => 
     Array.from(new Set(bankedQuestions.map(q => q.suggestedCategory))).sort(), 
@@ -128,8 +122,6 @@ export default function QuestionBankPage() {
   const handleCriteriaFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     if (e.target.id === 'criteriaCategory' || e.target.id === 'criteriaQuestionType') {
-      // This check seems to prevent Select components from updating state via this generic handler.
-      // Select changes are handled by handleCriteriaSelectChange.
       return; 
     }
     setCriteriaForm(prev => ({ ...prev, [name]: name === 'numQuestions' ? parseInt(value, 10) : value }));
@@ -146,13 +138,12 @@ export default function QuestionBankPage() {
       description: criteriaForm.description.trim().toLowerCase(),
       tags: criteriaForm.tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean).sort().join(','),
       category: criteriaForm.category,
-      // questionType: criteriaForm.questionType, // Only MCQs are used for now
     });
 
     const criteriaTagsArray = criteriaForm.tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
     
     const initialMatchingExtractedQuestions = bankedQuestions.filter(eq => {
-      if (eq.questionType !== 'mcq') return false; // Only consider MCQs for criteria quiz for now
+      if (eq.questionType !== 'mcq') return false;
 
       const matchesDescription = criteriaForm.description.trim() === '' ||
         eq.questionText.toLowerCase().includes(criteriaForm.description.trim().toLowerCase()) ||
@@ -166,11 +157,10 @@ export default function QuestionBankPage() {
       return matchesDescription && matchesTags && matchesCategory;
     });
 
-    // Map to MCQType and then filter for validity (options and answer must exist)
     const validQuizMcqs: MCQType[] = initialMatchingExtractedQuestions
       .map(eq => ({
         id: eq.id,
-        question: eq.questionText, // Ensure this mapping is correct
+        question: eq.questionText,
         options: eq.options ? [...eq.options] : [],
         answer: typeof eq.answer === 'string' ? eq.answer : "",
         explanation: eq.explanation || "No explanation provided.",
@@ -178,11 +168,10 @@ export default function QuestionBankPage() {
       }))
       .filter(q => q.options.length > 0 && q.answer.trim() !== "");
 
-
     if (initialMatchingExtractedQuestions.length > 0 && validQuizMcqs.length === 0) {
         toast({
-            title: "MCQs Matched Criteria, But None Were Valid for Quiz",
-            description: `Found ${initialMatchingExtractedQuestions.length} MCQ(s) matching your criteria, but none were complete (e.g., missing options or a defined answer) after validation. Please check the banked questions or broaden your criteria.`,
+            title: "Some MCQs Matched Criteria, But None Were Valid for Quiz",
+            description: `Found ${initialMatchingExtractedQuestions.length} MCQ(s) matching criteria, but none had both options and a defined, non-empty answer. Please review banked questions or broaden criteria.`,
             variant: "destructive",
             duration: 7000,
         });
@@ -190,9 +179,10 @@ export default function QuestionBankPage() {
         return;
     } else if (validQuizMcqs.length === 0) { 
          toast({
-            title: "No MCQs Found Matching Criteria",
-            description: "No MCQs in the bank match your specified description, tags, or category. Try broadening your search.",
+            title: "No Valid MCQs Found Matching Criteria",
+            description: "No complete MCQs (with options and answers) in the bank match your specified description, tags, or category. Try broadening your search.",
             variant: "destructive",
+            duration: 6000,
         });
         setIsGeneratingQuizByCriteria(false);
         return;
@@ -205,12 +195,9 @@ export default function QuestionBankPage() {
     let currentIndex = poolIndices.get(criteriaKey) || 0;
     let poolNeedsRebuild = false;
 
-    // Determine if the pool needs to be rebuilt
-    // Rebuild if criteria changed OR if the set of valid questions for these criteria changed
     if (criteriaKey !== lastCriteriaKeyForPool || !currentShuffledIds) {
       poolNeedsRebuild = true;
     } else if (currentShuffledIds) { 
-      // Check if the content of the pool (valid questions) has changed
       const previousPoolSet = new Set(currentShuffledIds);
       if (currentValidMcqIdsSet.size !== previousPoolSet.size || 
           !Array.from(currentValidMcqIdsSet).every(id => previousPoolSet.has(id))) {
@@ -228,8 +215,7 @@ export default function QuestionBankPage() {
     }
     
     if (!currentShuffledIds || currentShuffledIds.length === 0) {
-        // This case should ideally be caught earlier by validQuizMcqs.length === 0
-        toast({ title: "Error Building Question Pool", description: "Could not form a question pool for these criteria from valid MCQs.", variant: "destructive" });
+        toast({ title: "Error Building Question Pool", description: "Could not form a question pool from valid MCQs for these criteria.", variant: "destructive" });
         setIsGeneratingQuizByCriteria(false);
         return;
     }
@@ -239,17 +225,14 @@ export default function QuestionBankPage() {
     
     const selectedQuestionIds: string[] = [];
     for (let i = 0; i < numToSelect; i++) {
-      const poolReadIndex = (currentIndex + i) % numAvailableInPool; // Ensure wrap-around for reading
+      const poolReadIndex = (currentIndex + i) % numAvailableInPool;
       selectedQuestionIds.push(currentShuffledIds[poolReadIndex]);
     }
 
-    // Update the index for the next generation
     const newCurrentIndex = (currentIndex + numToSelect) % numAvailableInPool;
     let poolCycledThisTurn = false;
-    // If we've wrapped around AND selected enough to potentially cover the pool
     if (newCurrentIndex === 0 && (currentIndex + numToSelect >= numAvailableInPool) && numAvailableInPool > 0 && numToSelect > 0) {
       poolCycledThisTurn = true;
-      // Re-shuffle for the next cycle if the pool was fully or partially traversed to its end
       const reShuffledIds = Array.from(currentValidMcqIdsSet).sort(() => 0.5 - Math.random());
       const updatedShuffledPools = new Map(shuffledPools);
       updatedShuffledPools.set(criteriaKey, reShuffledIds);
@@ -260,14 +243,11 @@ export default function QuestionBankPage() {
     newPoolIndices.set(criteriaKey, newCurrentIndex);
     setPoolIndices(newPoolIndices);
 
-    // Get the full question objects for the selected IDs
     const finalQuizQuestions: MCQType[] = selectedQuestionIds
       .map(id => validQuizMcqs.find(mcq => mcq.id === id))
-      .filter(Boolean) as MCQType[]; // Filter out any potential undefined if an ID somehow didn't match
-
+      .filter(Boolean) as MCQType[];
 
     if (finalQuizQuestions.length === 0) {
-      // This should be rare if validQuizMcqs had items and selectedQuestionIds were derived from it
       toast({
         title: "No Questions Selected for Quiz",
         description: "Could not select any questions for the quiz, though a pool was available. This might be an internal error.",
@@ -281,13 +261,10 @@ export default function QuestionBankPage() {
     if (finalQuizQuestions.length < criteriaForm.numQuestions && numAvailableInPool < criteriaForm.numQuestions && !poolCycledThisTurn) {
       quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}) were available.`;
     } else if (finalQuizQuestions.length < criteriaForm.numQuestions && poolCycledThisTurn) {
-       // This message means we've gone through all available and re-shuffled.
        quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}). All available questions in this pool have been used and re-shuffled.`;
     } else if (finalQuizQuestions.length < criteriaForm.numQuestions && numToSelect < criteriaForm.numQuestions && numToSelect === numAvailableInPool) {
-      // Selected all available, but it was less than requested.
       quizGeneratedMessage += ` All ${numAvailableInPool} available question(s) for these criteria were selected.`;
     }
-
 
     if (poolCycledThisTurn) {
        toast({
@@ -314,7 +291,6 @@ export default function QuestionBankPage() {
     setCurrentQuiz(newQuiz);
     setIsGeneratingQuizByCriteria(false);
   };
-
 
   const handleStartAssembledQuiz = () => {
     const assembled = getAssembledQuestions();
@@ -344,6 +320,7 @@ export default function QuestionBankPage() {
         title: "No Valid MCQs in Assembly",
         description: `Found ${assembled.length} question(s) in assembly, but none were complete MCQs (e.g., missing options or a defined answer) after validation. Please review your assembled questions.`,
         variant: "destructive",
+        duration: 7000,
       });
       return;
     }
@@ -374,7 +351,6 @@ export default function QuestionBankPage() {
     setIsViewDetailsDialogOpen(true);
   };
 
-
   if (currentQuiz) {
     return (
       <div className="container mx-auto p-4 md:p-8 space-y-8">
@@ -393,7 +369,6 @@ export default function QuestionBankPage() {
       </div>
     );
   }
-
 
   return (
     <TooltipProvider>
@@ -517,7 +492,6 @@ export default function QuestionBankPage() {
         </CardFooter>
       </Card>
 
-
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5"/> Filter Banked Questions</CardTitle>
@@ -577,10 +551,10 @@ export default function QuestionBankPage() {
                 const isInAssembly = isQuestionInAssembly(question.id);
                 const isMCQ = question.questionType === 'mcq';
                 return (
-                  <AccordionItem value={question.id} key={question.id} className="bg-card border rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                  <AccordionItem value={question.id} key={question.id} className="bg-card border rounded-lg shadow-md hover:shadow-lg transition-shadow overflow-hidden">
                     <AccordionTrigger className="p-4 hover:no-underline text-left">
                         <div className="flex flex-col md:flex-row md:items-start justify-between w-full">
-                            <div className="font-semibold flex-1 mr-2 min-w-0"> {/* Ensures this div can shrink */}
+                            <div className="font-semibold flex-1 mr-2 min-w-0 overflow-hidden">
                                 <MathText text={`Q${index + 1}: ${question.questionText}`} className="text-base block" />
                             </div>
                             <div className="flex items-center gap-2 mt-2 md:mt-0 flex-shrink-0 flex-wrap">
@@ -597,9 +571,9 @@ export default function QuestionBankPage() {
                     <AccordionContent className="px-4 pb-4">
                         <div className="space-y-3 pt-2 border-t">
                            <div className="flex justify-between items-start">
-                                <div className="flex-1 min-w-0 mr-2"> {/* Added flex-1 min-w-0 for the content div */}
+                                <div className="flex-1 min-w-0 mr-2">
                                     <p className="font-semibold flex items-start gap-1.5"><BookText className="inline h-4 w-4 mr-1 mt-1 flex-shrink-0" />Question Text:</p>
-                                    <div className="ml-6 prose prose-sm dark:prose-invert max-w-none block min-w-0"> {/* Added min-w-0 to MathText container */}
+                                    <div className="ml-6 prose prose-sm dark:prose-invert max-w-none block min-w-0"> 
                                       <MathText text={question.questionText} />
                                     </div>
                                 </div>
@@ -610,7 +584,7 @@ export default function QuestionBankPage() {
                                     {question.options.map((opt, i) => (
                                         <div key={i} className={`ml-4 text-xs flex items-start gap-1.5 ${opt === question.answer ? 'text-green-500 font-semibold' : 'text-foreground/80'}`}>
                                             <span>•</span>
-                                            <div className="min-w-0 flex-1"> {/* Added min-w-0 here */}
+                                            <div className="min-w-0 flex-1"> 
                                               <MathText text={opt} />
                                             </div>
                                             {opt === question.answer && <span className="ml-1 text-xs">(Correct)</span>}
@@ -621,7 +595,7 @@ export default function QuestionBankPage() {
                             {question.explanation && (
                                 <div className="text-xs text-muted-foreground italic p-3 bg-muted/30 rounded-md border">
                                     <strong className="not-italic">Explanation:</strong>
-                                    <div className="min-w-0"> {/* Added min-w-0 here */}
+                                    <div className="min-w-0"> 
                                       <MathText text={question.explanation.substring(0,300) + (question.explanation.length > 300 ? '...' : '')} />
                                     </div>
                                 </div>
@@ -722,7 +696,6 @@ export default function QuestionBankPage() {
             </CardContent>
         </Card>
 
-        {/* View Details Dialog */}
       {currentQuestionForView && (
         <Dialog open={isViewDetailsDialogOpen} onOpenChange={setIsViewDetailsDialogOpen}>
           <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
@@ -812,8 +785,6 @@ export default function QuestionBankPage() {
               )}
                {!currentQuestionForView.options && currentQuestionForView.questionType === 'mcq' && <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Missing Options</AlertTitle><AlertDescription>This MCQ is missing its options.</AlertDescription></Alert>}
                {!currentQuestionForView.answer && <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Missing Answer</AlertTitle><AlertDescription>The answer for this question is not defined.</AlertDescription></Alert>}
-
-
             </div>
             <DialogFooter>
               <DialogClose asChild>
@@ -827,7 +798,3 @@ export default function QuestionBankPage() {
     </TooltipProvider>
   );
 }
-
-    
-
-    
