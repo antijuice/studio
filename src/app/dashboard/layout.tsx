@@ -94,7 +94,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <QuizAssemblyProvider> {/* Added Provider */}
         <SidebarProvider defaultOpen>
           <SidebarDecorated>
-            <SidebarInset className="overflow-x-hidden">{children}</SidebarInset>
+            <SidebarInset className="overflow-x-hidden overflow-y-auto">{children}</SidebarInset>
           </SidebarDecorated>
         </SidebarProvider>
       </QuizAssemblyProvider>
@@ -229,3 +229,4 @@ function SidebarDecorated({ children }: { children: React.ReactNode }) {
     </>
   );
 }
+
