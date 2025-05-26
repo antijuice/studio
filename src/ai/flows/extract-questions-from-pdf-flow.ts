@@ -115,7 +115,7 @@ const prompt = ai.definePrompt({
 Your task is to analyze the provided PDF document and extract individual quiz questions from it.
 For each question, you must identify its text, determine its type, extract options, the correct answer, provide an explanation, suggest tags, a category, describe any relevant images (that are not LaTeX-defined), and identify marks/points if specified.
 
-VERY IMPORTANT: Preserve all mathematical expressions (including matrices and complex LaTeX diagrams like TikZ) using standard LaTeX notation ($...$ for inline, $$...$$ for block, and environments like pmatrix for matrices).
+VERY IMPORTANT: Preserve all mathematical expressions (including matrices and complex LaTeX diagrams like TikZ) using standard LaTeX notation ($...$ for inline, $$...$$ for block, and environments like pmatrix for matrices, e.g., $$\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}$$).
 
 Document Content (from PDF):
 {{media url=pdfDataUri}}
@@ -134,10 +134,10 @@ For each question, provide 3-5 relevant specific keywords/tags for the "suggeste
 Answer Extraction/Suggestion for MCQs:
 {{#if autoSuggestMcqAnswers}}
   **Auto-Suggest MCQ Answers is ENABLED.**
-  For each MCQ:
+  For each MCQ, you **MUST** determine the correct answer.
   1. First, diligently search the PDF text for an explicitly stated correct answer.
-  2. If you find one with high confidence, use it.
-  3. If you DO NOT find an explicitly stated correct answer, OR if you find something but have low confidence, you **MUST** then analyze the question and its options to determine the most plausible correct answer.
+  2. If you find one with high confidence, use it as the 'answer'.
+  3. OTHERWISE (if no explicit answer is found, or if you find one but have low confidence in its correctness), you **MUST** analyze the question and its options to determine the most plausible correct answer. Use this chosen option as the 'answer'.
   4. The 'answer' field for this MCQ in your output **MUST** then be populated with the full text of this chosen correct option. It should not be omitted or empty when this mode is enabled.
 {{else}}
   **Auto-Suggest MCQ Answers is DISABLED.**
@@ -148,10 +148,10 @@ Answer Extraction/Suggestion for MCQs:
 Explanation Extraction/Generation:
 {{#if autoSuggestExplanations}}
   **Auto-Suggest Explanations is ENABLED.**
-  For each question:
-  1. First, diligently search the PDF text for an existing explanation.
-  2. If you find one with high confidence, use it.
-  3. If you DO NOT find an explicit explanation, OR if you find one but have low confidence in its quality/relevance, you **MUST** then generate a concise and accurate explanation.
+  For each question, you **MUST** provide an explanation.
+  1. First, diligently search the PDF text for an existing explanation for the question.
+  2. If you find one with high confidence that is relevant and accurate, use it as the 'explanation'.
+  3. OTHERWISE (if no explicit explanation is found, or if you find one but have low confidence in its quality/relevance), you **MUST** generate a concise and accurate explanation yourself.
   4. If an answer is available (extracted or suggested), ensure your explanation aligns with it and clarifies why it's correct. For MCQs, briefly explain why other key options are incorrect if it adds value.
   5. The 'explanation' field in your output **MUST** be populated with this extracted or generated explanation. It should not be omitted or empty when this mode is enabled.
 {{else}}
@@ -164,27 +164,25 @@ Explanation Extraction/Generation:
 Output Structure:
 Please structure your output as a JSON object strictly adhering to the schema for "ExtractQuestionsFromPdfOutput".
 The root object must have a key "extractedQuestions", which is an array of question objects.
-Each question object must have the fields: "questionText", "questionType", "options" (optional), "answer" (optional, unless auto-suggest enabled for MCQs), "explanation" (optional, unless auto-suggest enabled), "suggestedTags", "suggestedCategory", "relevantImageDescription" (optional), "marks" (optional).
+Each question object must have the fields: "questionText", "questionType", "options" (optional), "answer" (optional, follow Auto-Suggest MCQ Answers logic), "explanation" (optional, follow Auto-Suggest Explanations logic), "suggestedTags", "suggestedCategory", "relevantImageDescription" (optional), "marks" (optional).
 
 Detailed Field Instructions:
 - "questionText": Full question text. Math (matrices, TikZ) in LaTeX.
 - "questionType": 'mcq', 'short_answer', 'true_false', 'fill_in_the_blank', 'unknown'.
 - "options": Array of strings for MCQs. Math in LaTeX. Omit if not MCQ.
-- "answer": Correct answer text. Math in LaTeX.
-    - For MCQs: Full text of the correct option. (Follow Auto-Suggest MCQ Answers instruction above).
-    - For 'short_answer'/'fill_in_the_blank': Expected answer text.
-    - For 'true_false': "True" or "False".
+- "answer": Correct answer text. Math in LaTeX. (Follow Auto-Suggest MCQ Answers instruction above).
 - "explanation": Explanation for the answer. Math in LaTeX. (Follow Auto-Suggest Explanations instruction above).
 - "suggestedTags": Array of strings (global + specific tags).
 - "suggestedCategory": Single broader academic subject/category.
 - "relevantImageDescription": If a non-LaTeX visual on the same page is directly relevant, describe it. Else, omit.
 - "marks": Integer value if specified in PDF. Else, omit.
 
+Mark Allocation Guidance (Concise): If marks are specified (e.g., [5 marks]), the explanation and/or answer (for short answer) should ideally cover a corresponding number of key points or demonstrate a level of detail appropriate for those marks. Prioritize accuracy and clarity. Ensure all mathematical content is in LaTeX.
+
 General Guidelines:
 - Focus on question-answer units. Ignore non-question text.
 - If type is ambiguous, use 'unknown'.
 - Adhere strictly to JSON format and schema.
-- Mark Allocation Guidance (Concise): If marks are specified (e.g., 5 marks), the explanation/answer should ideally cover a corresponding number of key points. Prioritize accuracy and clarity. Ensure all mathematical content is in LaTeX.
 `,
 });
 
@@ -196,7 +194,6 @@ const extractQuestionsFromPdfFlow = ai.defineFlow(
   },
   async input => {
     const {output} = await prompt(input);
-    // More robust check for the output structure
     if (!output || !output.extractedQuestions || !Array.isArray(output.extractedQuestions)) {
       console.error('AI output is missing, malformed, or extractedQuestions is not an array. Output received:', JSON.stringify(output, null, 2));
       throw new Error('AI failed to return a valid structure for extracted questions. Please check the PDF content or try again.');
@@ -204,3 +201,4 @@ const extractQuestionsFromPdfFlow = ai.defineFlow(
     return output;
   }
 );
+
