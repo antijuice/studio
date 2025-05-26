@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from 'react';
@@ -9,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { CheckCircle, HelpCircle, Lightbulb, MessageSquareWarning, XCircle } from 'lucide-react';
 import { Separator } from '../ui/separator';
+import { MathText } from '../ui/MathText';
 
 interface QuizDisplayProps {
   quiz: QuizType;
@@ -78,16 +80,18 @@ export function QuizDisplay({ quiz, showAnswersInitially = false }: QuizDisplayP
             const userAnswer = answers[mcq.id];
             return (
               <div key={mcq.id} className="p-4 border rounded-md">
-                <p className="font-semibold">Q{index + 1}: {mcq.question}</p>
+                <p className="font-semibold">Q{index + 1}: <MathText text={mcq.question} /></p>
                 <p className={`text-sm mt-1 ${userAnswer?.isCorrect ? 'text-green-500' : 'text-red-500'}`}>
-                  Your answer: {userAnswer?.selectedOption || "Not answered"} {userAnswer?.isCorrect ? <CheckCircle className="inline h-4 w-4" /> : <XCircle className="inline h-4 w-4" />}
+                  Your answer: {userAnswer?.selectedOption ? <MathText text={userAnswer.selectedOption} /> : "Not answered"} {userAnswer?.isCorrect ? <CheckCircle className="inline h-4 w-4" /> : <XCircle className="inline h-4 w-4" />}
                 </p>
-                {!userAnswer?.isCorrect && <p className="text-sm text-green-600">Correct answer: {mcq.answer}</p>}
-                <Alert className="mt-2 bg-muted/30">
-                  <Lightbulb className="h-4 w-4 text-yellow-500" />
-                  <AlertTitle className="text-sm font-medium">Explanation</AlertTitle>
-                  <AlertDescription className="text-xs">{mcq.explanation}</AlertDescription>
-                </Alert>
+                {!userAnswer?.isCorrect && <p className="text-sm text-green-600">Correct answer: <MathText text={mcq.answer} /></p>}
+                {mcq.explanation && (
+                  <Alert className="mt-2 bg-muted/30">
+                    <Lightbulb className="h-4 w-4 text-yellow-500" />
+                    <AlertTitle className="text-sm font-medium">Explanation</AlertTitle>
+                    <AlertDescription className="text-xs"><MathText text={mcq.explanation} /></AlertDescription>
+                  </Alert>
+                )}
               </div>
             );
           })}
@@ -107,49 +111,61 @@ export function QuizDisplay({ quiz, showAnswersInitially = false }: QuizDisplayP
           <HelpCircle className="text-primary"/> Question {currentQuestionIndex + 1} of {quiz.questions.length}
         </CardTitle>
         <Separator className="my-2"/>
-        <p className="text-lg font-semibold text-foreground/90">{currentQuestion.question}</p>
+        <MathText text={currentQuestion.question} className="text-lg font-semibold text-foreground/90" />
       </CardHeader>
       
-      <RadioGroup
-        value={answers[currentQuestion.id]?.selectedOption}
-        onValueChange={(value) => handleOptionSelect(currentQuestion.id, value)}
-        className="space-y-3"
-        disabled={showResults}
-      >
-        {currentQuestion.options.map((option, index) => {
-          const optionId = `${currentQuestion.id}-option-${index}`;
-          let itemClassName = "p-4 rounded-lg border transition-colors duration-150 flex items-center space-x-3";
-          if (showResults) {
-            if (option === currentQuestion.answer) {
-              itemClassName += " bg-green-500/20 border-green-500 text-green-700 dark:text-green-400";
-            } else if (option === answers[currentQuestion.id]?.selectedOption) {
-              itemClassName += " bg-red-500/20 border-red-500 text-red-700 dark:text-red-400";
+      {currentQuestion.options && Array.isArray(currentQuestion.options) ? (
+        <RadioGroup
+          value={answers[currentQuestion.id]?.selectedOption}
+          onValueChange={(value) => handleOptionSelect(currentQuestion.id, value)}
+          className="space-y-3"
+          disabled={showResults}
+        >
+          {currentQuestion.options.map((option, index) => {
+            const optionId = `${currentQuestion.id}-option-${index}`;
+            let itemClassName = "p-4 rounded-lg border transition-colors duration-150 flex items-center space-x-3";
+            if (showResults) {
+              if (option === currentQuestion.answer) {
+                itemClassName += " bg-green-500/20 border-green-500 text-green-700 dark:text-green-400";
+              } else if (option === answers[currentQuestion.id]?.selectedOption) {
+                itemClassName += " bg-red-500/20 border-red-500 text-red-700 dark:text-red-400";
+              } else {
+                itemClassName += " border-border hover:bg-muted/50";
+              }
             } else {
-              itemClassName += " border-border hover:bg-muted/50";
+              itemClassName += " border-border hover:bg-muted/50 cursor-pointer";
+              if (option === answers[currentQuestion.id]?.selectedOption) {
+                  itemClassName += " bg-primary/10 border-primary";
+              }
             }
-          } else {
-             itemClassName += " border-border hover:bg-muted/50 cursor-pointer";
-             if (option === answers[currentQuestion.id]?.selectedOption) {
-                itemClassName += " bg-primary/10 border-primary";
-             }
-          }
 
-          return (
-            <div key={optionId} className={itemClassName}>
-              <RadioGroupItem value={option} id={optionId} className="border-muted-foreground data-[state=checked]:border-primary data-[state=checked]:text-primary"/>
-              <Label htmlFor={optionId} className="text-base flex-1 cursor-pointer">{option}</Label>
-              {showResults && option === currentQuestion.answer && <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />}
-              {showResults && option === answers[currentQuestion.id]?.selectedOption && option !== currentQuestion.answer && <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />}
-            </div>
-          );
-        })}
-      </RadioGroup>
+            return (
+              <div key={optionId} className={itemClassName}>
+                <RadioGroupItem value={option} id={optionId} className="border-muted-foreground data-[state=checked]:border-primary data-[state=checked]:text-primary"/>
+                <Label htmlFor={optionId} className="text-base flex-1 cursor-pointer">
+                  <MathText text={option} />
+                </Label>
+                {showResults && option === currentQuestion.answer && <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />}
+                {showResults && option === answers[currentQuestion.id]?.selectedOption && option !== currentQuestion.answer && <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />}
+              </div>
+            );
+          })}
+        </RadioGroup>
+      ) : (
+        <Alert variant="default">
+          <MessageSquareWarning className="h-4 w-4" />
+          <AlertTitle>No Options Available</AlertTitle>
+          <AlertDescription>
+            This question does not have multiple-choice options or is not an MCQ.
+          </AlertDescription>
+        </Alert>
+      )}
 
-      {showResults && (
+      {showResults && currentQuestion.explanation && (
         <Alert className="mt-4">
           <Lightbulb className="h-4 w-4" />
           <AlertTitle>Explanation</AlertTitle>
-          <AlertDescription>{currentQuestion.explanation}</AlertDescription>
+          <AlertDescription><MathText text={currentQuestion.explanation} /></AlertDescription>
         </Alert>
       )}
 
