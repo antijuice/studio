@@ -19,14 +19,19 @@ import {
 import {
   extractQuestionsFromPdf as extractQuestionsAI,
   type ExtractQuestionsFromPdfInput,
-  type ExtractQuestionsFromPdfOutput as AIExtractQuestionsOutput, // Renamed to avoid conflict with local type
+  type ExtractQuestionsFromPdfOutput as AIExtractQuestionsOutput, 
 } from "@/ai/flows/extract-questions-from-pdf-flow";
+import {
+  suggestMcqAnswer as suggestMcqAnswerAI,
+  type SuggestMcqAnswerInput,
+  type SuggestMcqAnswerOutput,
+} from "@/ai/flows/suggest-mcq-answer-flow";
 import type { 
   CustomQuizGenOutput, 
   PdfQuizGenOutput, 
   ShortAnswerEvaluationOutput, 
   ExtractedQuestion, 
-  ExtractQuestionsFromPdfOutput, // This is the type used in the UI and action signature
+  ExtractQuestionsFromPdfOutput, 
   SaveQuestionToBankOutput
 } from "@/lib/types"; 
 
@@ -67,29 +72,31 @@ export async function evaluateShortAnswerAction(input: EvaluateShortAnswerInput)
 export async function extractQuestionsFromPdfAction(input: ExtractQuestionsFromPdfInput): Promise<ExtractQuestionsFromPdfOutput> {
   try {
     const result: AIExtractQuestionsOutput = await extractQuestionsAI(input);
-    // Map AI output to UI type, adding a temporary client-side ID
+    
+    if (!result || !Array.isArray(result.extractedQuestions)) {
+      console.error('Invalid AI output from extractQuestionsAI:', result);
+      throw new Error('AI returned an invalid format for extracted questions.');
+    }
+
     const questionsWithIds: ExtractedQuestion[] = result.extractedQuestions.map((q, index) => ({
       ...q,
-      id: `extracted-${Date.now()}-${index}`, // Simple unique ID for client-side keying
+      id: `extracted-${Date.now()}-${index}`, 
     }));
     return { extractedQuestions: questionsWithIds };
   } catch (error) {
     console.error("Error in extractQuestionsFromPdfAction:", error);
-    throw new Error("Failed to extract questions from PDF. Please try again.");
+    if (error instanceof Error && error.message.includes("AI failed to return a valid structure")) {
+      throw error; // Re-throw specific AI error
+    }
+    throw new Error("Failed to extract questions from PDF. Please check the PDF or try again.");
   }
 }
 
 export async function saveQuestionToBankAction(question: ExtractedQuestion): Promise<SaveQuestionToBankOutput> {
   console.log("Attempting to save question to bank (simulated):", question.id, question.questionText);
-  // Simulate network delay
   await new Promise(resolve => setTimeout(resolve, 1000));
 
-  // Simulate a successful save for now
-  // In a real app, this would involve database interaction:
-  // - Check for duplicates
-  // - Save the question
-  // - Return the actual ID from the database
-  if (question.questionText.toLowerCase().includes("fail")) { // Simulate a failure for testing
+  if (question.questionText.toLowerCase().includes("fail")) { 
     console.error("Simulated failure saving question:", question.id);
     throw new Error(`Simulated error: Could not save question "${question.questionText.substring(0,20)}..."`);
   }
@@ -102,4 +109,15 @@ export async function saveQuestionToBankAction(question: ExtractedQuestion): Pro
     questionId: newQuestionIdInBank,
     message: `Question "${question.questionText.substring(0, 30)}..." (simulated) saved to bank.`,
   };
+}
+
+export async function suggestMcqAnswerAction(input: SuggestMcqAnswerInput): Promise<SuggestMcqAnswerOutput> {
+  try {
+    const result = await suggestMcqAnswerAI(input);
+    return result;
+  } catch (error) {
+    console.error("Error in suggestMcqAnswerAction:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred while suggesting an answer.";
+    throw new Error(errorMessage);
+  }
 }

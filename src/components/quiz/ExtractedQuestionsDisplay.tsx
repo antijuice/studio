@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import type { ExtractQuestionsFromPdfOutput, ExtractedQuestion, SaveQuestionToBankOutput } from '@/lib/types';
+import type { ExtractQuestionsFromPdfOutput, ExtractedQuestion, SaveQuestionToBankOutput, SuggestMcqAnswerInput, SuggestMcqAnswerOutput } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,14 +12,14 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
-import { BookText, CheckCircle, Edit, ImageIcon, Info, ListOrdered, Save, Tag, Type, XCircle, Loader2, SigmaSquare, Filter, TagsIcon, AlertTriangle } from 'lucide-react';
+import { BookText, CheckCircle, Edit, ImageIcon, Info, Lightbulb, ListOrdered, Save, Tag, Type, XCircle, Loader2, SigmaSquare, Filter, TagsIcon, AlertTriangle } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from '@/hooks/use-toast';
-import { saveQuestionToBankAction } from '@/app/actions/quizActions';
+import { saveQuestionToBankAction, suggestMcqAnswerAction } from '@/app/actions/quizActions';
 import { Separator } from '../ui/separator';
 import { MathText } from '../ui/MathText';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
-import { useQuestionBank } from '@/contexts/QuestionBankContext'; // Added import
+import { useQuestionBank } from '@/contexts/QuestionBankContext';
 
 interface ExtractedQuestionsDisplayProps {
   extractionResult: ExtractQuestionsFromPdfOutput;
@@ -49,7 +49,7 @@ type EditableQuestionData = Omit<ExtractedQuestion, 'id' | 'questionType'> & {
 
 export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestionsDisplayProps) {
   const { toast } = useToast();
-  const { addQuestionToBank } = useQuestionBank(); // Use context
+  const { addQuestionToBank } = useQuestionBank();
   const [saveStates, setSaveStates] = useState<QuestionSaveStateType>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
@@ -59,6 +59,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [currentQuestionForEdit, setCurrentQuestionForEdit] = useState<ExtractedQuestion | null>(null);
   const [editedData, setEditedData] = useState<Partial<EditableQuestionData>>({});
+  const [isSuggestingAnswer, setIsSuggestingAnswer] = useState(false);
 
 
   useEffect(() => {
@@ -122,7 +123,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
 
   const triggerSaveProcess = useCallback(async (questionToSave: ExtractedQuestion): Promise<boolean> => {
     setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: true, isSaved: false } }));
-    if (!isSavingAll) { // Don't show individual toast if part of "Save All"
+    if (!isSavingAll) {
       toast({
         title: "Saving Question...",
         description: `Attempting to save question to the bank.`,
@@ -133,7 +134,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       const result: SaveQuestionToBankOutput = await saveQuestionToBankAction(questionToSave);
       if (result.success) {
         setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: false, isSaved: true } }));
-        addQuestionToBank(questionToSave); // Add to context on successful save
+        addQuestionToBank(questionToSave); 
         if (!isSavingAll) {
           toast({
             title: "Question Saved",
@@ -214,7 +215,6 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     let successCount = 0;
     let failureCount = 0;
     
-    // Using Promise.allSettled to process all saves and then tally results
     const results = await Promise.allSettled(
       unsavedFilteredQuestions.map(q => triggerSaveProcess(q))
     );
@@ -234,6 +234,33 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
         variant: failureCount > 0 && successCount === 0 ? "destructive" : failureCount > 0 ? "default" : "default",
         duration: 5000,
     });
+  };
+
+  const handleAISuggestAnswer = async () => {
+    if (!currentQuestionForEdit || !editedData.questionText || !editedData.options || editedData.options.length === 0) {
+      toast({ title: "Cannot Suggest", description: "Question text and options must be available to suggest an answer.", variant: "destructive" });
+      return;
+    }
+    setIsSuggestingAnswer(true);
+    toast({ title: "AI Suggestion", description: "AI is thinking of an answer..." });
+    try {
+      const input: SuggestMcqAnswerInput = {
+        questionText: editedData.questionText,
+        options: editedData.options,
+      };
+      const result: SuggestMcqAnswerOutput = await suggestMcqAnswerAction(input);
+      if (result.suggestedAnswer && editedData.options.includes(result.suggestedAnswer)) {
+        setEditedData(prev => ({ ...prev, answer: result.suggestedAnswer }));
+        toast({ title: "AI Suggestion Successful", description: `AI suggested: "${result.suggestedAnswer}"` });
+      } else {
+         throw new Error("AI suggested an invalid option or no suggestion was made.");
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error suggesting answer.";
+      toast({ title: "AI Suggestion Failed", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsSuggestingAnswer(false);
+    }
   };
 
 
@@ -336,7 +363,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
               <AccordionTrigger className="hover:no-underline text-left">
                 <div className="flex flex-col md:flex-row md:items-start justify-between w-full pr-2">
                    <div className="font-semibold flex-1 mr-2 min-w-0">
-                     <MathText text={`Q${index + 1}: ${item.questionText}`} className="text-base" />
+                      <MathText text={`Q${index + 1}: ${item.questionText}`} className="text-base" />
                   </div>
                   <div className="flex items-center gap-2 mt-1 md:mt-0 flex-shrink-0 flex-wrap">
                     {item.marks !== undefined && <Badge variant="outline" className="flex items-center gap-1"><SigmaSquare className="h-3 w-3"/> {item.marks}</Badge>}
@@ -372,7 +399,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                           ) : (
                             <Edit className="mr-2 h-3 w-3" />
                           )}
-                          {currentSaveState.isLoading ? "Saving..." : currentSaveState.isSaved ? "Saved" : "Review & Save"}
+                          {currentSaveState.isLoading ? "Saving..." : currentSaveState.isSaved ? "Saved" : "Review &amp; Save"}
                       </Button>
                   </div>
                   
@@ -446,11 +473,14 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       {isEditDialogOpen && currentQuestionForEdit && (
         <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
           setIsEditDialogOpen(open);
-          if (!open) setCurrentQuestionForEdit(null);
+          if (!open) {
+            setCurrentQuestionForEdit(null);
+            setIsSuggestingAnswer(false); // Reset suggestion loading state
+          }
         }}>
           <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
             <DialogHeader>
-              <DialogTitle>Review & Edit Question</DialogTitle>
+              <DialogTitle>Review &amp; Edit Question</DialogTitle>
               <DialogDescription>
                 Make any necessary changes to the extracted question details before saving.
               </DialogDescription>
@@ -464,7 +494,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
               {currentQuestionForEdit.questionType === 'mcq' && (
                 <>
                   <div>
-                    <Label className="font-semibold">Options & Correct Answer</Label>
+                    <Label className="font-semibold">Options &amp; Correct Answer</Label>
                     {(editedData.options || []).map((opt, index) => (
                       <div key={index} className="flex items-center gap-2 mt-1">
                         <Input 
@@ -480,6 +510,18 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                     ))}
                     {(!editedData.options || editedData.options.length === 0) && <p className="text-xs text-muted-foreground">No options extracted.</p>}
                   </div>
+                  {(!editedData.answer || editedData.answer.trim() === "") && (editedData.options && editedData.options.length > 0) && (
+                     <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleAISuggestAnswer} 
+                        disabled={isSuggestingAnswer || !editedData.questionText}
+                        className="mt-2 w-full"
+                      >
+                        {isSuggestingAnswer ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lightbulb className="mr-2 h-4 w-4" />}
+                        {isSuggestingAnswer ? "Suggesting..." : "AI Suggest Answer"}
+                      </Button>
+                  )}
                 </>
               )}
               
@@ -528,7 +570,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
               <DialogClose asChild>
                 <Button variant="outline">Cancel</Button>
               </DialogClose>
-              <Button onClick={handleConfirmSaveFromDialog}>Confirm & Save to Bank</Button>
+              <Button onClick={handleConfirmSaveFromDialog}>Confirm &amp; Save to Bank</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

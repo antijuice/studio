@@ -140,3 +140,12 @@ export type SaveQuestionToBankOutput = {
   message: string;
 };
 
+// For AI suggesting an MCQ answer
+export type SuggestMcqAnswerInput = {
+  questionText: string;
+  options: string[];
+};
+
+export type SuggestMcqAnswerOutput = {
+  suggestedAnswer: string;
+};
