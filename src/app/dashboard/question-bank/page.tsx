@@ -72,8 +72,9 @@ export default function QuestionBankPage() {
   const [currentQuiz, setCurrentQuiz] = useState<QuizType | null>(null);
   const [isGeneratingQuizByCriteria, setIsGeneratingQuizByCriteria] = useState(false);
 
-  const [shuffledPools, setShuffledPools] = useState<Map<string, string[]>>(new Map());
-  const [poolIndices, setPoolIndices] = useState<Map<string, number>>(new Map());
+  // State for managing question pools for criteria-based quizzes
+  const [shuffledPools, setShuffledPools] = useState<Map<string, string[]>>(new Map()); // Map<criteriaKey, questionId[]>
+  const [poolIndices, setPoolIndices] = useState<Map<string, number>>(new Map()); // Map<criteriaKey, currentIndex>
   const [lastCriteriaKeyForPool, setLastCriteriaKeyForPool] = useState<string | null>(null);
 
 
@@ -123,13 +124,14 @@ export default function QuestionBankPage() {
       description: criteriaForm.description.trim().toLowerCase(),
       tags: criteriaForm.tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean).sort().join(','),
       category: criteriaForm.category,
-      questionType: criteriaForm.questionType,
+      // questionType: criteriaForm.questionType, // Only MCQs are used for now
     });
 
     const criteriaTagsArray = criteriaForm.tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
     
-    const allMatchingQuestions = bankedQuestions.filter(q => {
-      if (q.questionType !== 'mcq') return false;
+    // Step 1: Filter ExtractedQuestions that are MCQs and match basic criteria
+    const initialMatchingExtractedQuestions = bankedQuestions.filter(q => {
+      if (q.questionType !== 'mcq') return false; // Only MCQs for this feature
 
       const matchesDescription = criteriaForm.description.trim() === '' ||
         q.questionText.toLowerCase().includes(criteriaForm.description.trim().toLowerCase()) ||
@@ -143,35 +145,58 @@ export default function QuestionBankPage() {
       return matchesDescription && matchesTags && matchesCategory;
     });
 
-    if (allMatchingQuestions.length === 0) {
-      toast({
-        title: "No MCQs Found Matching Criteria",
-        description: "No MCQs in the bank match your specified description, tags, or category. Try broadening your search.",
-        variant: "destructive",
-      });
+    // Step 2: Map to MCQType and filter for validity (options and answer presence)
+    const validQuizMcqs: MCQType[] = initialMatchingExtractedQuestions
+      .map(eq => ({
+        id: eq.id,
+        question: eq.questionText, // Map questionText to question
+        options: eq.options ? [...eq.options] : [],
+        answer: typeof eq.answer === 'string' ? eq.answer : "", // Ensure answer is string
+        explanation: eq.explanation || "No explanation provided.",
+        type: 'mcq' as const, 
+      }))
+      .filter(q => q.options.length > 0 && q.answer.trim() !== "");
+
+
+    if (validQuizMcqs.length === 0) {
+        if (initialMatchingExtractedQuestions.length > 0) {
+             toast({
+                title: "Not Enough Valid MCQs",
+                description: `Found ${initialMatchingExtractedQuestions.length} MCQs matching your criteria, but none were complete (e.g., missing options or a defined answer) after validation. Please check the banked questions or broaden your criteria.`,
+                variant: "destructive",
+                duration: 7000,
+            });
+        } else {
+            toast({
+                title: "No MCQs Found Matching Criteria",
+                description: "No MCQs in the bank match your specified description, tags, or category. Try broadening your search.",
+                variant: "destructive",
+            });
+        }
       setIsGeneratingQuizByCriteria(false);
       return;
     }
+
+    // Now build the pool using IDs of validQuizMcqs
+    const validQuizMcqIds = validQuizMcqs.map(q => q.id);
+    const currentValidMcqIdsSet = new Set(validQuizMcqIds);
 
     let currentShuffledIds = shuffledPools.get(criteriaKey);
     let currentIndex = poolIndices.get(criteriaKey) || 0;
     let poolNeedsRebuild = false;
 
-    // Check if criteria changed or if the underlying pool of matching questions has changed.
-    const currentMatchingIdsSet = new Set(allMatchingQuestions.map(q => q.id));
     if (criteriaKey !== lastCriteriaKeyForPool || !currentShuffledIds) {
       poolNeedsRebuild = true;
     } else if (currentShuffledIds) {
-      // Check if the set of questions matching the criteria has changed
       const previousPoolSet = new Set(currentShuffledIds);
-      if (currentMatchingIdsSet.size !== previousPoolSet.size || 
-          !Array.from(currentMatchingIdsSet).every(id => previousPoolSet.has(id))) {
+      if (currentValidMcqIdsSet.size !== previousPoolSet.size || 
+          !Array.from(currentValidMcqIdsSet).every(id => previousPoolSet.has(id))) {
         poolNeedsRebuild = true;
       }
     }
     
     if (poolNeedsRebuild) {
-      currentShuffledIds = Array.from(currentMatchingIdsSet).sort(() => 0.5 - Math.random()); // Shuffle
+      currentShuffledIds = Array.from(currentValidMcqIdsSet).sort(() => 0.5 - Math.random()); // Shuffle
       currentIndex = 0;
       const newShuffledPools = new Map(shuffledPools);
       newShuffledPools.set(criteriaKey, currentShuffledIds);
@@ -180,7 +205,7 @@ export default function QuestionBankPage() {
     }
     
     if (!currentShuffledIds || currentShuffledIds.length === 0) {
-        toast({ title: "Error Building Question Pool", description: "Could not form a question pool for these criteria. This should not happen if matching questions were found.", variant: "destructive" });
+        toast({ title: "Error Building Question Pool", description: "Could not form a question pool for these criteria from valid MCQs.", variant: "destructive" });
         setIsGeneratingQuizByCriteria(false);
         return;
     }
@@ -198,7 +223,7 @@ export default function QuestionBankPage() {
     let poolCycledThisTurn = false;
     if (newCurrentIndex === 0 && (currentIndex + numToSelect >= numAvailableInPool) && numAvailableInPool > 0 && numToSelect > 0) {
       poolCycledThisTurn = true;
-      const reShuffledIds = Array.from(currentMatchingIdsSet).sort(() => 0.5 - Math.random());
+      const reShuffledIds = Array.from(currentValidMcqIdsSet).sort(() => 0.5 - Math.random());
       const updatedShuffledPools = new Map(shuffledPools); 
       updatedShuffledPools.set(criteriaKey, reShuffledIds);
       setShuffledPools(updatedShuffledPools);
@@ -208,37 +233,26 @@ export default function QuestionBankPage() {
     newPoolIndices.set(criteriaKey, newCurrentIndex);
     setPoolIndices(newPoolIndices);
 
-    const selectedExtractedQuestions = selectedQuestionIds
-      .map(id => allMatchingQuestions.find(q => q.id === id)) 
-      .filter(Boolean) as ExtractedQuestion[];
-
-    const mappedQuestions: MCQType[] = selectedExtractedQuestions
-      .map(eq => ({
-        id: eq.id,
-        question: eq.questionText,
-        options: eq.options ? [...eq.options] : [],
-        answer: typeof eq.answer === 'string' ? eq.answer : "", // Ensure answer is string
-        explanation: eq.explanation || "No explanation provided.",
-        type: 'mcq' as const, 
-      }))
-      .filter(q => q.options.length > 0 && q.answer.trim() !== "");
+    // Get the full MCQ objects for the selected IDs
+    const finalQuizQuestions: MCQType[] = selectedQuestionIds
+      .map(id => validQuizMcqs.find(mcq => mcq.id === id))
+      .filter(Boolean) as MCQType[];
 
 
-    if (mappedQuestions.length === 0) {
+    if (finalQuizQuestions.length === 0) { // Should ideally not happen if numToSelect > 0 and currentShuffledIds had items
       toast({
-        title: "No Valid MCQs for Quiz",
-        description: `Found ${allMatchingQuestions.length} MCQs matching your criteria, but none were complete (e.g., missing options or a defined answer) after validation. Please check the banked questions or broaden your criteria.`,
+        title: "No Questions Selected",
+        description: "Could not select any questions for the quiz, though a pool was available.",
         variant: "destructive",
-        duration: 7000,
       });
       setIsGeneratingQuizByCriteria(false);
       return;
     }
     
-    let quizGeneratedMessage = `Generated a quiz with ${mappedQuestions.length} question(s).`;
-    if (mappedQuestions.length < criteriaForm.numQuestions && !poolCycledThisTurn) {
+    let quizGeneratedMessage = `Generated a quiz with ${finalQuizQuestions.length} question(s) from ${numAvailableInPool} available valid MCQs.`;
+    if (finalQuizQuestions.length < criteriaForm.numQuestions && !poolCycledThisTurn) {
       quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}) were available or valid.`;
-    } else if (mappedQuestions.length < criteriaForm.numQuestions && poolCycledThisTurn) {
+    } else if (finalQuizQuestions.length < criteriaForm.numQuestions && poolCycledThisTurn) {
        quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}). All available questions have been used.`;
     }
 
@@ -261,7 +275,7 @@ export default function QuestionBankPage() {
     const newQuiz: QuizType = {
       id: `criteria-quiz-${Date.now()}`,
       title: `Quiz based on: ${criteriaForm.description || 'Selected Criteria'}`,
-      questions: mappedQuestions,
+      questions: finalQuizQuestions,
       createdAt: new Date(),
     };
     setCurrentQuiz(newQuiz);
@@ -640,3 +654,4 @@ export default function QuestionBankPage() {
   );
 }
 
+    

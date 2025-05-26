@@ -628,7 +628,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                       ) : (
                         <Edit className="mr-2 h-3 w-3" />
                       )}
-                      {currentSaveState.isLoading ? "Processing..." : currentSaveState.isSaved ? "Saved (Edit)" : "Review &amp; Save"}
+                      {currentSaveState.isLoading ? "Processing..." : currentSaveState.isSaved ? "Saved (Edit)" : "Review & Save"}
                     </Button>
                   </div>
 
@@ -821,3 +821,4 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   );
 }
 
+    
