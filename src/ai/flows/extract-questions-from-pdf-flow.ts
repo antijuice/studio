@@ -139,15 +139,27 @@ For each question, provide 3-5 relevant and specific keywords or tags based on i
 {{/if}}
 
 {{#if autoSuggestMcqAnswers}}
-Auto-Suggest MCQ Answers: Enabled. For Multiple Choice Questions (MCQs), if you cannot confidently identify the correct answer directly from the text, please analyze the question and its options and suggest the most plausible correct answer. The 'answer' field MUST be the full text of one of the provided options.
+Instruction: Auto-Suggest MCQ Answers is ENABLED.
+Task: For every Multiple Choice Question (MCQ):
+1. Attempt to identify the correct answer directly from the PDF text.
+2. If a correct answer is NOT clearly identifiable from the text, you MUST analyze the question and its options to suggest the most plausible correct answer.
+3. The 'answer' field in your output for this MCQ MUST then be populated with the full text of this suggested correct option.
+{{else}}
+Instruction: Auto-Suggest MCQ Answers is DISABLED.
+Task: For MCQs, identify the correct answer only if it is explicitly available in the PDF text. If no answer is found, omit the 'answer' field.
 {{/if}}
 
 {{#if autoSuggestExplanations}}
-Auto-Suggest Explanations: Enabled. For all questions, if an explanation for the answer is not directly present in the text, please try to generate a concise and accurate one. This explanation should clarify why the answer is correct, and for MCQs, might briefly explain why other key options are incorrect if that adds significant value. Ensure mathematical content in explanations is in LaTeX.
+Instruction: Auto-Suggest Explanations is ENABLED.
+Task: For every question (MCQ, True/False, Short Answer, etc.):
+1. Attempt to identify an explanation directly from the PDF text.
+2. If an explanation is NOT clearly identifiable from the text, you MUST generate a concise and accurate one.
+3. If an answer is available (either extracted or suggested as part of this process), the explanation should align with it and clarify why it's correct. For MCQs, briefly explain why other key options are incorrect if it adds significant value.
+4. Ensure all mathematical content in generated explanations is in proper LaTeX format.
 {{else}}
-For MCQs and True/False questions, if an explanation is not directly present in the text, please try to infer or generate a concise and accurate one.
+Instruction: Auto-Suggest Explanations is DISABLED.
+Task: For MCQs and True/False questions, identify an explanation only if it is explicitly available in the PDF text or can be trivially inferred. For other question types, only include an explanation if explicitly present in the PDF. If no explanation is found according to these rules, omit the 'explanation' field.
 {{/if}}
-
 
 Please structure your output as a JSON object strictly adhering to the schema provided for "ExtractQuestionsFromPdfOutput".
 The root object must have a key "extractedQuestions", which is an array of question objects.
@@ -156,11 +168,11 @@ Each question object in the "extractedQuestions" array must have the following f
 - "questionType": (enum: 'mcq', 'short_answer', 'true_false', 'fill_in_the_blank', 'unknown') The identified type of the question. Ensure 'mcq' is used for multiple-choice questions.
 - "options": (array of strings, optional) For 'mcq' type, list all multiple choice options. Each option must have math (including matrices and complex LaTeX diagrams) in LaTeX. Omit if not an MCQ.
 - "answer": (string, optional) The correct answer. Ensure any math (including matrices and complex LaTeX diagrams) in LaTeX.
-    - For 'mcq', this must be the full text of the correct option (e.g., "Paris", not "C"). If autoSuggestMcqAnswers is enabled and no answer is found, provide your best suggestion.
+    - For 'mcq', this must be the full text of the correct option (e.g., "Paris", not "C"). If autoSuggestMcqAnswers is enabled and no answer is found, provide your best suggestion as per the instruction above.
     - For 'short_answer' or 'fill_in_the_blank', this is the expected answer text.
     - For 'true_false', this should be "True" or "False".
     - Omit this field if the answer is not identifiable or not applicable (unless auto-suggestion is enabled for MCQs).
-- "explanation": (string, optional) An explanation for the correct answer. Ensure any math (including matrices and complex LaTeX diagrams) in LaTeX. If autoSuggestExplanations is enabled and no explanation is found, generate one. Otherwise, for MCQs and True/False, infer or generate if not present. If not applicable or unidentifiable, omit.
+- "explanation": (string, optional) An explanation for the correct answer. Ensure any math (including matrices and complex LaTeX diagrams) in LaTeX. If autoSuggestExplanations is enabled and no explanation is found, generate one as per the instruction above. Otherwise, for MCQs and True/False, infer or generate if not present. If not applicable or unidentifiable, omit.
 - "suggestedTags": (array of strings) As instructed above, combine global tags (if provided) with 3-5 question-specific tags.
 - "suggestedCategory": (string) Suggest a single, broader academic subject or category for this question (e.g., "Physics", "Literature", "Ancient History", "Calculus", "Organic Chemistry").
 - "relevantImageDescription": (string, optional) Examine the content of the question and its surrounding area on the same page in the PDF. If there is a distinct visual element (like a diagram, chart, photograph, or illustration) that is *not directly defined in LaTeX* and is *directly and highly relevant* to understanding or answering that specific question, provide a brief description of this visual element. For example, 'A diagram of a plant cell with labels for nucleus and chloroplast, relevant to the question about cell organelles.' If no such specific, relevant visual is present for a question, or if it's just decorative or not on the same page, omit this field. Do not attempt to extract image data itself.
