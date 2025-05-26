@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
-import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare, PlusCircle, MinusCircle, PlayCircle, Trash2, PackagePlus, Wand2, ArrowLeft, Loader2, Info, Eye, AlertTriangle } from 'lucide-react';
+import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare, PlusCircle, MinusCircle, PlayCircle, Trash2, PackagePlus, Wand2, ArrowLeft, Loader2, Info, Eye, AlertTriangle, BookText } from 'lucide-react';
 import type { ExtractedQuestion, Quiz as QuizType, MCQ as MCQType } from '@/lib/types'; 
 import { MathText } from '@/components/ui/MathText';
 import { useQuestionBank } from '@/contexts/QuestionBankContext';
@@ -19,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { QuizDisplay } from '@/components/quiz/QuizDisplay';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 const questionTypeLabels: Record<ExtractedQuestion['questionType'], string> = {
   mcq: 'Multiple Choice',
@@ -62,6 +63,8 @@ export default function QuestionBankPage() {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = React.useState(ALL_FILTER_VALUE);
   const [selectedTypeFilter, setSelectedTypeFilter] = React.useState(ALL_FILTER_VALUE);
+  const [tagSearchTerm, setTagSearchTerm] = useState('');
+
 
   // State for "Start Quiz by Criteria"
   const [criteriaForm, setCriteriaForm] = useState<CriteriaQuizFormState>({
@@ -94,6 +97,12 @@ export default function QuestionBankPage() {
   );
 
   const filteredBankQuestions = React.useMemo(() => {
+    const searchTagsArray = tagSearchTerm
+      .toLowerCase()
+      .split(',')
+      .map(tag => tag.trim())
+      .filter(tag => tag !== '');
+
     return bankedQuestions.filter(q => {
       const matchesSearch = searchTerm === '' || 
         q.questionText.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -105,15 +114,22 @@ export default function QuestionBankPage() {
       const matchesType = selectedTypeFilter === ALL_FILTER_VALUE || selectedTypeFilter === '' ||
         q.questionType === selectedTypeFilter;
         
-      return matchesSearch && matchesCategory && matchesType;
+      const matchesTags = searchTagsArray.length === 0 ||
+        searchTagsArray.every(searchTag =>
+          q.suggestedTags.some(qTag => qTag.toLowerCase().includes(searchTag))
+        );
+        
+      return matchesSearch && matchesCategory && matchesType && matchesTags;
     });
-  }, [bankedQuestions, searchTerm, selectedCategoryFilter, selectedTypeFilter]);
+  }, [bankedQuestions, searchTerm, selectedCategoryFilter, selectedTypeFilter, tagSearchTerm]);
   
   const assemblyCount = getAssemblyCount();
 
   const handleCriteriaFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     if (e.target.id === 'criteriaCategory' || e.target.id === 'criteriaQuestionType') {
+      // This check seems to prevent Select components from updating state via this generic handler.
+      // Select changes are handled by handleCriteriaSelectChange.
       return; 
     }
     setCriteriaForm(prev => ({ ...prev, [name]: name === 'numQuestions' ? parseInt(value, 10) : value }));
@@ -135,8 +151,9 @@ export default function QuestionBankPage() {
 
     const criteriaTagsArray = criteriaForm.tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
     
+    // 1. Filter banked questions for MCQs matching text/tag/category criteria
     const initialMatchingExtractedQuestions = bankedQuestions.filter(eq => {
-      if (eq.questionType !== 'mcq') return false;
+      if (eq.questionType !== 'mcq') return false; // Only consider MCQs for this feature for now
 
       const matchesDescription = criteriaForm.description.trim() === '' ||
         eq.questionText.toLowerCase().includes(criteriaForm.description.trim().toLowerCase()) ||
@@ -150,10 +167,11 @@ export default function QuestionBankPage() {
       return matchesDescription && matchesTags && matchesCategory;
     });
 
+    // 2. Map to MCQType and validate for quiz readiness (options and answer present)
     const validQuizMcqs: MCQType[] = initialMatchingExtractedQuestions
       .map(eq => ({
         id: eq.id,
-        question: eq.questionText, // Ensure this mapping happens
+        question: eq.questionText,
         options: eq.options ? [...eq.options] : [],
         answer: typeof eq.answer === 'string' ? eq.answer : "",
         explanation: eq.explanation || "No explanation provided.",
@@ -171,7 +189,7 @@ export default function QuestionBankPage() {
         });
         setIsGeneratingQuizByCriteria(false);
         return;
-    } else if (validQuizMcqs.length === 0) {
+    } else if (validQuizMcqs.length === 0) { // No questions matched criteria initially
          toast({
             title: "No MCQs Found Matching Criteria",
             description: "No MCQs in the bank match your specified description, tags, or category. Try broadening your search.",
@@ -181,16 +199,18 @@ export default function QuestionBankPage() {
         return;
     }
     
-    const validQuizMcqIds = validQuizMcqs.map(q => q.id);
+    const validQuizMcqIds = validQuizMcqs.map(q => q.id); // IDs of *actually* valid MCQs
     const currentValidMcqIdsSet = new Set(validQuizMcqIds);
 
     let currentShuffledIds = shuffledPools.get(criteriaKey);
     let currentIndex = poolIndices.get(criteriaKey) || 0;
     let poolNeedsRebuild = false;
 
+    // Check if the pool needs to be rebuilt (criteria changed or the set of valid questions for criteria changed)
     if (criteriaKey !== lastCriteriaKeyForPool || !currentShuffledIds) {
       poolNeedsRebuild = true;
     } else if (currentShuffledIds) { 
+      // Check if the actual set of valid questions for this criteria has changed
       const previousPoolSet = new Set(currentShuffledIds);
       if (currentValidMcqIdsSet.size !== previousPoolSet.size || 
           !Array.from(currentValidMcqIdsSet).every(id => previousPoolSet.has(id))) {
@@ -199,7 +219,7 @@ export default function QuestionBankPage() {
     }
     
     if (poolNeedsRebuild) {
-      currentShuffledIds = Array.from(currentValidMcqIdsSet).sort(() => 0.5 - Math.random()); 
+      currentShuffledIds = Array.from(currentValidMcqIdsSet).sort(() => 0.5 - Math.random()); // Shuffle only the valid IDs
       currentIndex = 0;
       const newShuffledPools = new Map(shuffledPools);
       newShuffledPools.set(criteriaKey, currentShuffledIds);
@@ -208,12 +228,13 @@ export default function QuestionBankPage() {
     }
     
     if (!currentShuffledIds || currentShuffledIds.length === 0) {
+        // This case should be rare now given earlier checks, but as a safeguard:
         toast({ title: "Error Building Question Pool", description: "Could not form a question pool for these criteria from valid MCQs.", variant: "destructive" });
         setIsGeneratingQuizByCriteria(false);
         return;
     }
 
-    const numAvailableInPool = currentShuffledIds.length;
+    const numAvailableInPool = currentShuffledIds.length; // This is the count of *valid* MCQs matching criteria
     const numToSelect = Math.min(criteriaForm.numQuestions, numAvailableInPool);
     
     const selectedQuestionIds: string[] = [];
@@ -222,12 +243,15 @@ export default function QuestionBankPage() {
       selectedQuestionIds.push(currentShuffledIds[poolReadIndex]);
     }
 
+    // Update the index for the next quiz generation with these criteria
     const newCurrentIndex = (currentIndex + numToSelect) % numAvailableInPool;
     let poolCycledThisTurn = false;
     if (newCurrentIndex === 0 && (currentIndex + numToSelect >= numAvailableInPool) && numAvailableInPool > 0 && numToSelect > 0) {
+      // Pool has been fully cycled
       poolCycledThisTurn = true;
+      // Re-shuffle the pool for the next cycle
       const reShuffledIds = Array.from(currentValidMcqIdsSet).sort(() => 0.5 - Math.random());
-      const updatedShuffledPools = new Map(shuffledPools); 
+      const updatedShuffledPools = new Map(shuffledPools); // Create a new map to ensure state update
       updatedShuffledPools.set(criteriaKey, reShuffledIds);
       setShuffledPools(updatedShuffledPools);
     }
@@ -236,12 +260,13 @@ export default function QuestionBankPage() {
     newPoolIndices.set(criteriaKey, newCurrentIndex);
     setPoolIndices(newPoolIndices);
 
+    // Get the full MCQ objects for the selected IDs
     const finalQuizQuestions: MCQType[] = selectedQuestionIds
       .map(id => validQuizMcqs.find(mcq => mcq.id === id))
-      .filter(Boolean) as MCQType[];
+      .filter(Boolean) as MCQType[]; // filter(Boolean) to remove any undefined if find fails (should not happen)
 
 
-    if (finalQuizQuestions.length === 0) { 
+    if (finalQuizQuestions.length === 0) { // Should be rare now
       toast({
         title: "No Questions Selected",
         description: "Could not select any questions for the quiz, though a pool was available. This might be an internal error.",
@@ -257,6 +282,7 @@ export default function QuestionBankPage() {
     } else if (finalQuizQuestions.length < criteriaForm.numQuestions && poolCycledThisTurn) {
        quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}). All available questions in this pool have been used. Pool has been re-shuffled.`;
     } else if (finalQuizQuestions.length < criteriaForm.numQuestions && numToSelect < criteriaForm.numQuestions && numToSelect === numAvailableInPool) {
+      // This means numQuestions requested was > numAvailable, and we selected all available.
       quizGeneratedMessage += ` All ${numAvailableInPool} available question(s) for these criteria were selected.`;
     }
 
@@ -293,28 +319,29 @@ export default function QuestionBankPage() {
     if (assembled.length === 0) {
       toast({
         title: "Assembly Empty",
-        description: "Please add some MCQs to your assembly first.",
+        description: "Please add some MCQs to your quiz assembly first.",
         variant: "destructive"
       });
       return;
     }
 
+    // Map and validate assembled questions to ensure they are quiz-ready MCQs
     const mcqQuestionsForQuiz: MCQType[] = assembled
-      .filter(eq => eq.questionType === 'mcq') 
+      .filter(eq => eq.questionType === 'mcq') // Ensure it's an MCQ
       .map(eq => ({
         id: eq.id,
         question: eq.questionText,
-        options: eq.options ? [...eq.options] : [],
-        answer: typeof eq.answer === 'string' ? eq.answer : "",
+        options: eq.options ? [...eq.options] : [], // Ensure options is an array
+        answer: typeof eq.answer === 'string' ? eq.answer : "", // Ensure answer is a string
         explanation: eq.explanation || "No explanation provided.",
         type: 'mcq' as const,
       }))
-      .filter(q => q.options.length > 0 && q.answer.trim() !== "");
+      .filter(q => q.options.length > 0 && q.answer.trim() !== ""); // Validate options and answer
 
     if (mcqQuestionsForQuiz.length === 0) {
       toast({
         title: "No Valid MCQs in Assembly",
-        description: `Found ${assembled.length} question(s) in assembly, but none were complete MCQs (e.g., missing options or a defined answer) after validation.`,
+        description: `Found ${assembled.length} question(s) in assembly, but none were complete MCQs (e.g., missing options or a defined answer) after validation. Please review your assembled questions.`,
         variant: "destructive",
       });
       return;
@@ -322,7 +349,7 @@ export default function QuestionBankPage() {
     
     let toastMessage = `Created a quiz with ${mcqQuestionsForQuiz.length} valid MCQ(s) from your assembly.`;
     if (mcqQuestionsForQuiz.length < assembled.length) {
-       toastMessage += ` Some selected items might have been non-MCQs or incomplete.`
+       toastMessage += ` Some selected items might have been non-MCQs or were incomplete and have been excluded.`
     }
 
     toast({
@@ -338,7 +365,7 @@ export default function QuestionBankPage() {
       createdAt: new Date(),
     };
     setCurrentQuiz(newQuiz);
-    clearAssembly({ suppressToast: true });
+    clearAssembly({ suppressToast: true }); // Clear assembly without an extra toast
   };
 
   const handleOpenViewDetails = (question: ExtractedQuestion) => {
@@ -370,7 +397,7 @@ export default function QuestionBankPage() {
   return (
     <TooltipProvider>
     <div className="container mx-auto p-4 md:p-8 space-y-8">
-      <header>
+      <header className="mb-8"> 
         <div className="flex items-center gap-3">
           <LibraryBig className="h-10 w-10 text-primary" />
           <div>
@@ -522,9 +549,20 @@ export default function QuestionBankPage() {
               </SelectContent>
             </Select>
           </div>
+          <div className="mt-4">
+            <Label htmlFor="tag-search" className="text-sm font-medium">Filter by Tags (comma-separated, matches if ALL tags present)</Label>
+            <Input
+                id="tag-search"
+                type="text"
+                placeholder="e.g., biology, mitosis"
+                value={tagSearchTerm}
+                onChange={(e) => setTagSearchTerm(e.target.value)}
+                className="mt-1"
+            />
+          </div>
         </CardHeader>
         <CardContent>
-          {bankedQuestions.length === 0 && searchTerm === '' && selectedCategoryFilter === ALL_FILTER_VALUE && selectedTypeFilter === ALL_FILTER_VALUE ? (
+          {bankedQuestions.length === 0 && searchTerm === '' && selectedCategoryFilter === ALL_FILTER_VALUE && selectedTypeFilter === ALL_FILTER_VALUE && tagSearchTerm === '' ? (
              <div className="text-center py-10">
               <LibraryBig className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
               <p className="text-xl font-medium text-muted-foreground">Your Question Bank is Empty</p>
@@ -533,115 +571,129 @@ export default function QuestionBankPage() {
               </p>
             </div>
           ) : filteredBankQuestions.length > 0 ? (
-            <div className="space-y-4">
-              {filteredBankQuestions.map((question) => {
+            <Accordion type="multiple" className="w-full space-y-2">
+              {filteredBankQuestions.map((question, index) => {
                 const isInAssembly = isQuestionInAssembly(question.id);
                 const isMCQ = question.questionType === 'mcq';
                 return (
-                  <Card key={question.id} className="shadow-md hover:shadow-lg transition-shadow bg-card">
-                    <CardHeader>
-                      <div className="flex justify-between items-start">
-                          <div className="text-lg flex items-start gap-2 flex-1 min-w-0">
-                              <QuestionTypeIcon type={question.questionType} />
-                               <MathText text={question.questionText} className="font-medium block" />
-                          </div>
-                          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
-                              {question.marks !== undefined && (
-                                  <Badge variant="outline" className="flex items-center gap-1 text-xs">
-                                      <SigmaSquare className="h-3 w-3"/> {question.marks} Marks
-                                  </Badge>
-                              )}
-                              <Badge variant="secondary" className="text-xs">{questionTypeLabels[question.questionType]}</Badge>
-                          </div>
-                      </div>
-                      <CardDescription className="text-xs mt-1 ml-6"> 
-                        Category: <Badge variant="outline" className="text-xs font-normal">{question.suggestedCategory}</Badge>
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="pl-6 space-y-3">
-                      {question.questionType === 'mcq' && question.options && (
-                          <div className="text-sm space-y-1 mb-2">
-                              <p className="font-medium text-xs text-muted-foreground mb-1">Options:</p>
-                              {question.options.map((opt, i) => (
-                                  <div key={i} className={`ml-4 text-xs flex items-start gap-1.5 ${opt === question.answer ? 'text-green-500 font-semibold' : 'text-foreground/80'}`}>
-                                      <span>•</span> <MathText text={opt} /> {opt === question.answer && <span className="ml-1 text-xs">(Correct)</span>}
-                                  </div>
-                              ))}
-                          </div>
-                      )}
-                       {question.explanation && (
-                           <div className="text-xs text-muted-foreground italic p-3 bg-muted/30 rounded-md border">
-                             <strong className="not-italic">Explanation:</strong> <MathText text={question.explanation.substring(0,300) + (question.explanation.length > 300 ? '...' : '')} />
-                          </div>
-                       )}
-                      {question.suggestedTags && question.suggestedTags.length > 0 && (
-                          <div className="mt-3 flex flex-wrap items-center gap-1">
-                          <span className="text-xs text-muted-foreground mr-1">Tags:</span>
-                          {question.suggestedTags.slice(0, 5).map(tag => (
-                              <Badge key={tag} variant="secondary" className="text-xs font-normal">
-                              <Tag className="h-3 w-3 mr-1" />{tag}
-                              </Badge>
-                          ))}
-                          {question.suggestedTags.length > 5 && <Badge variant="outline" className="text-xs">...</Badge>}
-                          </div>
-                      )}
-                    </CardContent>
-                    <CardFooter className="flex justify-end gap-2 border-t pt-4 mt-4">
-                       <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="text-muted-foreground hover:text-foreground"
-                          onClick={() => handleOpenViewDetails(question)}
-                        >
-                          <Eye className="mr-2 h-4 w-4" /> View Details
-                        </Button>
-                      <Tooltip>
-                          <TooltipTrigger asChild>
-                              <Button 
-                                  variant="outline" 
-                                  size="sm" 
-                                  className="text-red-500 hover:bg-red-500/10 hover:text-red-600 border-red-500/50"
-                                  onClick={() => removeQuestionFromBank(question.id)}
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" /> Remove from Bank
-                              </Button>
-                          </TooltipTrigger>
-                          <TooltipContent><p>Remove this question from your current session's bank.</p></TooltipContent>
-                      </Tooltip>
-
-                      {!isMCQ ? (
-                         <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button variant="outline" size="sm" className="ml-2" disabled>
-                                    Unsupported Type
+                  <AccordionItem value={question.id} key={question.id} className="bg-card border rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                    <AccordionTrigger className="p-4 hover:no-underline text-left">
+                        <div className="flex flex-col md:flex-row md:items-start justify-between w-full">
+                            <div className="font-semibold flex-1 mr-2 min-w-0"> {/* Ensures this div can shrink */}
+                                <MathText text={`Q${index + 1}: ${question.questionText}`} className="text-base block" />
+                            </div>
+                            <div className="flex items-center gap-2 mt-2 md:mt-0 flex-shrink-0 flex-wrap">
+                                {question.marks !== undefined && (
+                                    <Badge variant="outline" className="flex items-center gap-1 text-xs">
+                                        <SigmaSquare className="h-3 w-3"/> {question.marks} Marks
+                                    </Badge>
+                                )}
+                                <Badge variant="secondary" className="text-xs">{questionTypeLabels[question.questionType]}</Badge>
+                                <Badge variant="outline" className="text-xs font-normal">{question.suggestedCategory}</Badge>
+                            </div>
+                        </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-4 pb-4">
+                        <div className="space-y-3 pt-2 border-t">
+                           <div className="flex justify-between items-start">
+                                <div className="flex-1 min-w-0 mr-2"> {/* Added flex-1 min-w-0 for the content div */}
+                                    <p className="font-semibold flex items-start gap-1.5"><BookText className="inline h-4 w-4 mr-1 mt-1 flex-shrink-0" />Question Text:</p>
+                                    <div className="ml-6 prose prose-sm dark:prose-invert max-w-none block min-w-0"> {/* Added min-w-0 to MathText container */}
+                                      <MathText text={question.questionText} />
+                                    </div>
+                                </div>
+                           </div>
+                            {question.questionType === 'mcq' && question.options && (
+                                <div className="text-sm space-y-1 mb-2">
+                                    <p className="font-medium text-xs text-muted-foreground mb-1">Options:</p>
+                                    {question.options.map((opt, i) => (
+                                        <div key={i} className={`ml-4 text-xs flex items-start gap-1.5 ${opt === question.answer ? 'text-green-500 font-semibold' : 'text-foreground/80'}`}>
+                                            <span>•</span>
+                                            <div className="min-w-0 flex-1"> {/* Added min-w-0 here */}
+                                              <MathText text={opt} />
+                                            </div>
+                                            {opt === question.answer && <span className="ml-1 text-xs">(Correct)</span>}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {question.explanation && (
+                                <div className="text-xs text-muted-foreground italic p-3 bg-muted/30 rounded-md border">
+                                    <strong className="not-italic">Explanation:</strong>
+                                    <div className="min-w-0"> {/* Added min-w-0 here */}
+                                      <MathText text={question.explanation.substring(0,300) + (question.explanation.length > 300 ? '...' : '')} />
+                                    </div>
+                                </div>
+                            )}
+                            {question.suggestedTags && question.suggestedTags.length > 0 && (
+                                <div className="mt-3 flex flex-wrap items-center gap-1">
+                                    <span className="text-xs text-muted-foreground mr-1">Tags:</span>
+                                    {question.suggestedTags.slice(0, 5).map(tag => (
+                                        <Badge key={tag} variant="secondary" className="text-xs font-normal">
+                                            <Tag className="h-3 w-3 mr-1" />{tag}
+                                        </Badge>
+                                    ))}
+                                    {question.suggestedTags.length > 5 && <Badge variant="outline" className="text-xs">...</Badge>}
+                                </div>
+                            )}
+                            <div className="flex justify-end gap-2 pt-3 mt-3 border-t">
+                                <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="text-muted-foreground hover:text-foreground"
+                                    onClick={() => handleOpenViewDetails(question)}
+                                >
+                                    <Eye className="mr-2 h-4 w-4" /> View Full Details
                                 </Button>
-                            </TooltipTrigger>
-                            <TooltipContent><p>Only MCQs can be added to quizzes currently.</p></TooltipContent>
-                        </Tooltip>
-                      ) : isInAssembly ? (
-                        <Button 
-                          variant="destructive" 
-                          size="sm" 
-                          className="ml-2"
-                          onClick={() => removeQuestionFromAssembly(question.id)}
-                        >
-                          <MinusCircle className="mr-2 h-4 w-4" /> Remove from Quiz
-                        </Button>
-                      ) : (
-                        <Button 
-                          variant="default" 
-                          size="sm" 
-                          className="ml-2 bg-primary hover:bg-primary/90"
-                          onClick={() => addQuestionToAssembly(question)}
-                        >
-                          <PlusCircle className="mr-2 h-4 w-4" /> Add to New Quiz
-                        </Button>
-                      )}
-                    </CardFooter>
-                  </Card>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button 
+                                            variant="outline" 
+                                            size="sm" 
+                                            className="text-red-500 hover:bg-red-500/10 hover:text-red-600 border-red-500/50"
+                                            onClick={() => removeQuestionFromBank(question.id)}
+                                        >
+                                            <Trash2 className="mr-2 h-4 w-4" /> Remove
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Remove this question from your current session's bank.</p></TooltipContent>
+                                </Tooltip>
+
+                                {!isMCQ ? (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button variant="outline" size="sm" className="ml-2" disabled>
+                                                Unsupported Type
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>Only MCQs can be added to quizzes currently.</p></TooltipContent>
+                                    </Tooltip>
+                                ) : isInAssembly ? (
+                                    <Button 
+                                        variant="destructive" 
+                                        size="sm" 
+                                        className="ml-2"
+                                        onClick={() => removeQuestionFromAssembly(question.id)}
+                                    >
+                                        <MinusCircle className="mr-2 h-4 w-4" /> Remove from Quiz
+                                    </Button>
+                                ) : (
+                                    <Button 
+                                        variant="default" 
+                                        size="sm" 
+                                        className="ml-2 bg-primary hover:bg-primary/90"
+                                        onClick={() => addQuestionToAssembly(question)}
+                                    >
+                                        <PlusCircle className="mr-2 h-4 w-4" /> Add to New Quiz
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                    </AccordionContent>
+                  </AccordionItem>
                 );
               })}
-            </div>
+            </Accordion>
           ) : (
             <div className="text-center py-10">
               <Search className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
@@ -682,7 +734,9 @@ export default function QuestionBankPage() {
             <div className="space-y-4 py-4 overflow-y-auto flex-grow pr-2">
               <div>
                 <Label className="font-semibold text-sm">Question Text:</Label>
-                <MathText text={currentQuestionForView.questionText} className="mt-1 p-2 border rounded-md bg-muted/30 text-base" />
+                <div className="mt-1 p-2 border rounded-md bg-muted/30 text-base min-w-0">
+                    <MathText text={currentQuestionForView.questionText} />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -709,7 +763,11 @@ export default function QuestionBankPage() {
                   <ul className="list-none mt-1 space-y-1">
                     {currentQuestionForView.options.map((opt, index) => (
                       <li key={`view-opt-${index}`} className={`p-2 border rounded-md text-sm flex items-start gap-1.5 ${opt === currentQuestionForView.answer ? 'bg-green-500/10 border-green-500/30 text-green-700' : 'bg-card'}`}>
-                         <span className="font-mono text-xs opacity-70">{(index + 1)}.</span> <MathText text={opt} /> {opt === currentQuestionForView.answer && <CheckCircle className="inline h-4 w-4 ml-auto text-green-600 flex-shrink-0" />}
+                         <span className="font-mono text-xs opacity-70">{(index + 1)}.</span>
+                         <div className="min-w-0 flex-1">
+                           <MathText text={opt} />
+                         </div>
+                         {opt === currentQuestionForView.answer && <CheckCircle className="inline h-4 w-4 ml-auto text-green-600 flex-shrink-0" />}
                       </li>
                     ))}
                   </ul>
@@ -719,7 +777,7 @@ export default function QuestionBankPage() {
               {currentQuestionForView.questionType !== 'mcq' && currentQuestionForView.answer && (
                  <div>
                   <Label className="font-semibold text-sm">Answer:</Label>
-                  <div className="mt-1 p-2 border rounded-md bg-green-500/10 border-green-500/30 text-sm">
+                  <div className="mt-1 p-2 border rounded-md bg-green-500/10 border-green-500/30 text-sm min-w-0">
                     <MathText text={currentQuestionForView.answer} />
                   </div>
                 </div>
@@ -728,7 +786,7 @@ export default function QuestionBankPage() {
               {currentQuestionForView.explanation && (
                 <div>
                   <Label className="font-semibold text-sm">Explanation:</Label>
-                  <div className="mt-1 p-2 border rounded-md bg-muted/50 text-sm">
+                  <div className="mt-1 p-2 border rounded-md bg-muted/50 text-sm min-w-0">
                     <MathText text={currentQuestionForView.explanation} />
                   </div>
                 </div>
@@ -769,3 +827,4 @@ export default function QuestionBankPage() {
   );
 }
 
+    
