@@ -229,9 +229,10 @@ function SidebarDecorated({ children }: { children: React.ReactNode }) {
       </Sidebar>
       
       {/* The SidebarInset is the main content area */}
-      <div className="flex-1 md:ml-[var(--sidebar-width)] peer-data-[state=collapsed]:md:ml-[var(--sidebar-width-icon)]">
+      <div className="flex-1 md:ml-[var(--sidebar-width)] peer-data-[state=collapsed]:md:ml-[var(--sidebar-width-icon)] transition-[margin-left] duration-200 ease-linear">
         {children}
       </div>
     </>
   );
 }
+

@@ -151,9 +151,8 @@ export default function QuestionBankPage() {
 
     const criteriaTagsArray = criteriaForm.tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
     
-    // 1. Filter banked questions for MCQs matching text/tag/category criteria
     const initialMatchingExtractedQuestions = bankedQuestions.filter(eq => {
-      if (eq.questionType !== 'mcq') return false; // Only consider MCQs for this feature for now
+      if (eq.questionType !== 'mcq') return false;
 
       const matchesDescription = criteriaForm.description.trim() === '' ||
         eq.questionText.toLowerCase().includes(criteriaForm.description.trim().toLowerCase()) ||
@@ -167,11 +166,10 @@ export default function QuestionBankPage() {
       return matchesDescription && matchesTags && matchesCategory;
     });
 
-    // 2. Map to MCQType and validate for quiz readiness (options and answer present)
     const validQuizMcqs: MCQType[] = initialMatchingExtractedQuestions
       .map(eq => ({
         id: eq.id,
-        question: eq.questionText,
+        question: eq.questionText, // Ensure this mapping is correct
         options: eq.options ? [...eq.options] : [],
         answer: typeof eq.answer === 'string' ? eq.answer : "",
         explanation: eq.explanation || "No explanation provided.",
@@ -182,14 +180,14 @@ export default function QuestionBankPage() {
 
     if (initialMatchingExtractedQuestions.length > 0 && validQuizMcqs.length === 0) {
         toast({
-            title: "Not Enough Valid MCQs",
-            description: `Found ${initialMatchingExtractedQuestions.length} question(s) matching your criteria, but none were complete MCQs (e.g., missing options or a defined answer) after validation. Please check the banked questions or broaden your criteria.`,
+            title: "Some MCQs Matched, But None Were Valid",
+            description: `Found ${initialMatchingExtractedQuestions.length} MCQ(s) matching your criteria, but none were complete (e.g., missing options or a defined answer) after validation. Please check the banked questions or broaden your criteria.`,
             variant: "destructive",
             duration: 7000,
         });
         setIsGeneratingQuizByCriteria(false);
         return;
-    } else if (validQuizMcqs.length === 0) { // No questions matched criteria initially
+    } else if (validQuizMcqs.length === 0) { 
          toast({
             title: "No MCQs Found Matching Criteria",
             description: "No MCQs in the bank match your specified description, tags, or category. Try broadening your search.",
@@ -199,18 +197,16 @@ export default function QuestionBankPage() {
         return;
     }
     
-    const validQuizMcqIds = validQuizMcqs.map(q => q.id); // IDs of *actually* valid MCQs
+    const validQuizMcqIds = validQuizMcqs.map(q => q.id);
     const currentValidMcqIdsSet = new Set(validQuizMcqIds);
 
     let currentShuffledIds = shuffledPools.get(criteriaKey);
     let currentIndex = poolIndices.get(criteriaKey) || 0;
     let poolNeedsRebuild = false;
 
-    // Check if the pool needs to be rebuilt (criteria changed or the set of valid questions for criteria changed)
     if (criteriaKey !== lastCriteriaKeyForPool || !currentShuffledIds) {
       poolNeedsRebuild = true;
     } else if (currentShuffledIds) { 
-      // Check if the actual set of valid questions for this criteria has changed
       const previousPoolSet = new Set(currentShuffledIds);
       if (currentValidMcqIdsSet.size !== previousPoolSet.size || 
           !Array.from(currentValidMcqIdsSet).every(id => previousPoolSet.has(id))) {
@@ -219,7 +215,7 @@ export default function QuestionBankPage() {
     }
     
     if (poolNeedsRebuild) {
-      currentShuffledIds = Array.from(currentValidMcqIdsSet).sort(() => 0.5 - Math.random()); // Shuffle only the valid IDs
+      currentShuffledIds = Array.from(currentValidMcqIdsSet).sort(() => 0.5 - Math.random());
       currentIndex = 0;
       const newShuffledPools = new Map(shuffledPools);
       newShuffledPools.set(criteriaKey, currentShuffledIds);
@@ -228,13 +224,12 @@ export default function QuestionBankPage() {
     }
     
     if (!currentShuffledIds || currentShuffledIds.length === 0) {
-        // This case should be rare now given earlier checks, but as a safeguard:
         toast({ title: "Error Building Question Pool", description: "Could not form a question pool for these criteria from valid MCQs.", variant: "destructive" });
         setIsGeneratingQuizByCriteria(false);
         return;
     }
 
-    const numAvailableInPool = currentShuffledIds.length; // This is the count of *valid* MCQs matching criteria
+    const numAvailableInPool = currentShuffledIds.length;
     const numToSelect = Math.min(criteriaForm.numQuestions, numAvailableInPool);
     
     const selectedQuestionIds: string[] = [];
@@ -243,15 +238,12 @@ export default function QuestionBankPage() {
       selectedQuestionIds.push(currentShuffledIds[poolReadIndex]);
     }
 
-    // Update the index for the next quiz generation with these criteria
     const newCurrentIndex = (currentIndex + numToSelect) % numAvailableInPool;
     let poolCycledThisTurn = false;
     if (newCurrentIndex === 0 && (currentIndex + numToSelect >= numAvailableInPool) && numAvailableInPool > 0 && numToSelect > 0) {
-      // Pool has been fully cycled
       poolCycledThisTurn = true;
-      // Re-shuffle the pool for the next cycle
       const reShuffledIds = Array.from(currentValidMcqIdsSet).sort(() => 0.5 - Math.random());
-      const updatedShuffledPools = new Map(shuffledPools); // Create a new map to ensure state update
+      const updatedShuffledPools = new Map(shuffledPools);
       updatedShuffledPools.set(criteriaKey, reShuffledIds);
       setShuffledPools(updatedShuffledPools);
     }
@@ -260,13 +252,12 @@ export default function QuestionBankPage() {
     newPoolIndices.set(criteriaKey, newCurrentIndex);
     setPoolIndices(newPoolIndices);
 
-    // Get the full MCQ objects for the selected IDs
     const finalQuizQuestions: MCQType[] = selectedQuestionIds
       .map(id => validQuizMcqs.find(mcq => mcq.id === id))
-      .filter(Boolean) as MCQType[]; // filter(Boolean) to remove any undefined if find fails (should not happen)
+      .filter(Boolean) as MCQType[];
 
 
-    if (finalQuizQuestions.length === 0) { // Should be rare now
+    if (finalQuizQuestions.length === 0) {
       toast({
         title: "No Questions Selected",
         description: "Could not select any questions for the quiz, though a pool was available. This might be an internal error.",
@@ -278,11 +269,10 @@ export default function QuestionBankPage() {
     
     let quizGeneratedMessage = `Generated a quiz with ${finalQuizQuestions.length} question(s) from ${numAvailableInPool} available valid MCQs.`;
     if (finalQuizQuestions.length < criteriaForm.numQuestions && numAvailableInPool < criteriaForm.numQuestions && !poolCycledThisTurn) {
-      quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}) were available in the bank for these criteria.`;
+      quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}) were available.`;
     } else if (finalQuizQuestions.length < criteriaForm.numQuestions && poolCycledThisTurn) {
-       quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}). All available questions in this pool have been used. Pool has been re-shuffled.`;
+       quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}). All available questions in this pool have been used and re-shuffled.`;
     } else if (finalQuizQuestions.length < criteriaForm.numQuestions && numToSelect < criteriaForm.numQuestions && numToSelect === numAvailableInPool) {
-      // This means numQuestions requested was > numAvailable, and we selected all available.
       quizGeneratedMessage += ` All ${numAvailableInPool} available question(s) for these criteria were selected.`;
     }
 
@@ -325,18 +315,17 @@ export default function QuestionBankPage() {
       return;
     }
 
-    // Map and validate assembled questions to ensure they are quiz-ready MCQs
     const mcqQuestionsForQuiz: MCQType[] = assembled
-      .filter(eq => eq.questionType === 'mcq') // Ensure it's an MCQ
+      .filter(eq => eq.questionType === 'mcq') 
       .map(eq => ({
         id: eq.id,
         question: eq.questionText,
-        options: eq.options ? [...eq.options] : [], // Ensure options is an array
-        answer: typeof eq.answer === 'string' ? eq.answer : "", // Ensure answer is a string
+        options: eq.options ? [...eq.options] : [], 
+        answer: typeof eq.answer === 'string' ? eq.answer : "", 
         explanation: eq.explanation || "No explanation provided.",
         type: 'mcq' as const,
       }))
-      .filter(q => q.options.length > 0 && q.answer.trim() !== ""); // Validate options and answer
+      .filter(q => q.options.length > 0 && q.answer.trim() !== ""); 
 
     if (mcqQuestionsForQuiz.length === 0) {
       toast({
@@ -365,7 +354,7 @@ export default function QuestionBankPage() {
       createdAt: new Date(),
     };
     setCurrentQuiz(newQuiz);
-    clearAssembly({ suppressToast: true }); // Clear assembly without an extra toast
+    clearAssembly({ suppressToast: true }); 
   };
 
   const handleOpenViewDetails = (question: ExtractedQuestion) => {
@@ -407,7 +396,7 @@ export default function QuestionBankPage() {
         </div>
       </header>
 
-      <Card className="shadow-lg sticky top-4 z-20 bg-card/95 backdrop-blur-sm border">
+      <Card className="shadow-lg"> {/* Removed sticky classes here */}
         <CardHeader>
             <div className="flex justify-between items-center">
                 <CardTitle className="text-xl flex items-center gap-2"><PackagePlus className="h-6 w-6 text-accent"/>Quiz Assembly</CardTitle>
