@@ -1,18 +1,22 @@
 
 "use client";
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare, PlusCircle, MinusCircle, PlayCircle, Trash2, PackagePlus } from 'lucide-react';
-import type { ExtractedQuestion } from '@/lib/types'; 
+import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare, PlusCircle, MinusCircle, PlayCircle, Trash2, PackagePlus, Wand2, ArrowLeft } from 'lucide-react';
+import type { ExtractedQuestion, Quiz as QuizType, MCQ as MCQType } from '@/lib/types'; 
 import { MathText } from '@/components/ui/MathText';
 import { useQuestionBank } from '@/contexts/QuestionBankContext';
-import { useQuizAssembly } from '@/contexts/QuizAssemblyContext'; // Added import
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Added import
+import { useQuizAssembly } from '@/contexts/QuizAssemblyContext';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { QuizDisplay } from '@/components/quiz/QuizDisplay'; // Import QuizDisplay
+import { useToast } from '@/hooks/use-toast';
 
 const questionTypeLabels: Record<ExtractedQuestion['questionType'], string> = {
   mcq: 'Multiple Choice',
@@ -32,6 +36,14 @@ const QuestionTypeIcon = ({ type }: { type: ExtractedQuestion['questionType'] })
 
 const ALL_FILTER_VALUE = "__ALL__";
 
+interface CriteriaQuizFormState {
+  description: string;
+  tags: string;
+  category: string;
+  questionType: string;
+  numQuestions: number;
+}
+
 export default function QuestionBankPage() {
   const { bankedQuestions } = useQuestionBank();
   const { 
@@ -41,10 +53,24 @@ export default function QuestionBankPage() {
     getAssemblyCount,
     clearAssembly
   } = useQuizAssembly();
+  const { toast } = useToast();
 
+  // Filters for browsing the bank
   const [searchTerm, setSearchTerm] = React.useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = React.useState(ALL_FILTER_VALUE);
   const [selectedTypeFilter, setSelectedTypeFilter] = React.useState(ALL_FILTER_VALUE);
+
+  // State for "Start Quiz by Criteria"
+  const [criteriaForm, setCriteriaForm] = useState<CriteriaQuizFormState>({
+    description: '',
+    tags: '',
+    category: ALL_FILTER_VALUE,
+    questionType: 'mcq', // Default to MCQ as QuizDisplay handles it best
+    numQuestions: 5,
+  });
+  const [currentQuiz, setCurrentQuiz] = useState<QuizType | null>(null);
+  const [isGeneratingQuizByCriteria, setIsGeneratingQuizByCriteria] = useState(false);
+
 
   const uniqueCategories = React.useMemo(() => 
     Array.from(new Set(bankedQuestions.map(q => q.suggestedCategory))).sort(), 
@@ -55,7 +81,7 @@ export default function QuestionBankPage() {
     [bankedQuestions]
   );
 
-  const filteredQuestions = React.useMemo(() => {
+  const filteredBankQuestions = React.useMemo(() => {
     return bankedQuestions.filter(q => {
       const matchesSearch = searchTerm === '' || 
         q.questionText.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -73,6 +99,96 @@ export default function QuestionBankPage() {
   
   const assemblyCount = getAssemblyCount();
 
+  const handleCriteriaFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    // Special handling for select elements because their event doesn't have a 'name' attribute directly
+    if (e.target.id === 'criteriaCategory' || e.target.id === 'criteriaQuestionType') {
+       // This case should be handled by onValueChange for Select components
+      return;
+    }
+    setCriteriaForm(prev => ({ ...prev, [name]: name === 'numQuestions' ? parseInt(value, 10) : value }));
+  };
+  
+  const handleCriteriaSelectChange = (name: keyof CriteriaQuizFormState, value: string) => {
+    setCriteriaForm(prev => ({...prev, [name]: value}));
+  }
+
+  const handleGenerateQuizByCriteria = () => {
+    setIsGeneratingQuizByCriteria(true);
+
+    const criteriaTags = criteriaForm.tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
+    
+    let potentialQuestions = bankedQuestions.filter(q => {
+      // Only consider MCQs for now as QuizDisplay is optimized for them
+      if (q.questionType !== 'mcq') return false;
+
+      const matchesDescription = criteriaForm.description === '' ||
+        q.questionText.toLowerCase().includes(criteriaForm.description.toLowerCase()) ||
+        (q.explanation && q.explanation.toLowerCase().includes(criteriaForm.description.toLowerCase()));
+
+      const matchesTags = criteriaTags.length === 0 || 
+        criteriaTags.every(ct => q.suggestedTags.some(qt => qt.toLowerCase().includes(ct)));
+      
+      const matchesCategory = criteriaForm.category === ALL_FILTER_VALUE || q.suggestedCategory === criteriaForm.category;
+      const matchesType = criteriaForm.questionType === ALL_FILTER_VALUE || q.questionType === criteriaForm.questionType;
+
+      return matchesDescription && matchesTags && matchesCategory && matchesType;
+    });
+
+    if (potentialQuestions.length === 0) {
+      toast({
+        title: "No Questions Found",
+        description: "No questions in the bank match your criteria. Try broadening your search.",
+        variant: "destructive",
+      });
+      setIsGeneratingQuizByCriteria(false);
+      return;
+    }
+
+    // Shuffle and pick numQuestions
+    const shuffled = potentialQuestions.sort(() => 0.5 - Math.random());
+    const selectedQuestions = shuffled.slice(0, criteriaForm.numQuestions) as MCQType[];
+
+    if (selectedQuestions.length === 0) { // Should be caught by above, but as a safeguard
+         toast({
+            title: "Not Enough Questions",
+            description: `Could not find ${criteriaForm.numQuestions} questions matching criteria. Found ${potentialQuestions.length}.`,
+            variant: "destructive",
+         });
+         setIsGeneratingQuizByCriteria(false);
+         return;
+    }
+    
+    const newQuiz: QuizType = {
+      id: `criteria-quiz-${Date.now()}`,
+      title: `Quiz based on: ${criteriaForm.description || 'Selected Criteria'}`,
+      questions: selectedQuestions,
+      createdAt: new Date(),
+    };
+    setCurrentQuiz(newQuiz);
+    setIsGeneratingQuizByCriteria(false);
+  };
+
+  if (currentQuiz) {
+    return (
+      <div className="container mx-auto p-4 md:p-8 space-y-8">
+        <Button onClick={() => setCurrentQuiz(null)} variant="outline" className="mb-4">
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Question Bank
+        </Button>
+        <Card className="shadow-xl">
+          <CardHeader>
+            <CardTitle className="text-2xl">{currentQuiz.title}</CardTitle>
+            <CardDescription>Generated from your criteria using banked questions.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <QuizDisplay quiz={currentQuiz} />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+
   return (
     <TooltipProvider>
     <div className="container mx-auto p-4 md:p-8 space-y-8">
@@ -81,7 +197,7 @@ export default function QuestionBankPage() {
           <LibraryBig className="h-10 w-10 text-primary" />
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Question Bank</h1>
-            <p className="text-muted-foreground">Browse, search, and manage your saved questions.</p>
+            <p className="text-muted-foreground">Browse, search, manage questions, and generate quizzes.</p>
           </div>
         </div>
       </header>
@@ -96,7 +212,7 @@ export default function QuestionBankPage() {
         </CardHeader>
         <CardContent>
             <p className="text-sm text-muted-foreground mb-4">
-                Select questions from the bank below to add them to your custom quiz.
+                Select MCQs from the bank below to add them to your custom quiz assembly.
             </p>
         </CardContent>
         <CardFooter className="flex flex-col sm:flex-row justify-end gap-2">
@@ -106,20 +222,110 @@ export default function QuestionBankPage() {
             <Tooltip>
                 <TooltipTrigger asChild>
                     <Button disabled={assemblyCount === 0} className="bg-accent hover:bg-accent/90">
-                        <PlayCircle className="mr-2 h-4 w-4" /> Start Quiz with {assemblyCount} Questions
+                        <PlayCircle className="mr-2 h-4 w-4" /> Start Quiz with {assemblyCount} Assembled Questions
                     </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                    <p>Quiz creation from banked questions is coming soon!</p>
+                    <p>Taking quizzes from assembled questions is coming soon!</p>
                 </TooltipContent>
             </Tooltip>
         </CardFooter>
       </Card>
 
-
+      {/* Start Quiz by Criteria Card */}
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5"/> Filter Questions</CardTitle>
+          <CardTitle className="text-xl flex items-center gap-2"><Wand2 className="h-6 w-6 text-primary"/>Start Quiz by Criteria</CardTitle>
+          <CardDescription>Generate a quiz from banked MCQs based on your specifications.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label htmlFor="criteriaDescription">Description / Topic</Label>
+            <Textarea 
+              id="criteriaDescription" 
+              name="description" 
+              placeholder="e.g., 'Questions about photosynthesis basics' or 'Easy algebra problems'" 
+              value={criteriaForm.description}
+              onChange={handleCriteriaFormChange}
+              className="mt-1"
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="criteriaTags">Tags (comma-separated)</Label>
+              <Input 
+                id="criteriaTags" 
+                name="tags" 
+                placeholder="e.g., biology, cell, exam1" 
+                value={criteriaForm.tags}
+                onChange={handleCriteriaFormChange}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="criteriaCategory">Category</Label>
+              <Select 
+                name="category" 
+                value={criteriaForm.category} 
+                onValueChange={(value) => handleCriteriaSelectChange('category', value)}
+              >
+                <SelectTrigger id="criteriaCategory" className="mt-1"><SelectValue placeholder="Any Category" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_FILTER_VALUE}>Any Category</SelectItem>
+                  {uniqueCategories.map(cat => <SelectItem key={`crit-cat-${cat}`} value={cat}>{cat}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="criteriaQuestionType">Question Type</Label>
+              <Select 
+                name="questionType" 
+                value={criteriaForm.questionType} 
+                onValueChange={(value) => handleCriteriaSelectChange('questionType', value)}
+              >
+                <SelectTrigger id="criteriaQuestionType" className="mt-1"><SelectValue placeholder="Any MCQ Type" /></SelectTrigger>
+                <SelectContent>
+                  {/* <SelectItem value={ALL_FILTER_VALUE}>Any Type (MCQ Recommended)</SelectItem> */}
+                  <SelectItem value="mcq">Multiple Choice (Recommended)</SelectItem>
+                  {/* Add other types if QuizDisplay supports them well in future */}
+                </SelectContent>
+              </Select>
+               <p className="text-xs text-muted-foreground mt-1">Currently, only MCQs are recommended for reliable quiz generation.</p>
+            </div>
+            <div>
+              <Label htmlFor="criteriaNumQuestions">Number of Questions</Label>
+              <Input 
+                id="criteriaNumQuestions" 
+                name="numQuestions" 
+                type="number" 
+                min="1" 
+                max="50" 
+                value={criteriaForm.numQuestions}
+                onChange={handleCriteriaFormChange}
+                className="mt-1"
+              />
+            </div>
+          </div>
+        </CardContent>
+        <CardFooter>
+          <Button 
+            onClick={handleGenerateQuizByCriteria} 
+            disabled={isGeneratingQuizByCriteria || bankedQuestions.filter(q => q.questionType === 'mcq').length === 0}
+            className="w-full md:w-auto ml-auto bg-primary hover:bg-primary/90"
+          >
+            <PlayCircle className="mr-2 h-4 w-4"/> 
+            {isGeneratingQuizByCriteria ? "Generating..." : "Generate & Start Quiz"}
+          </Button>
+        </CardFooter>
+      </Card>
+
+
+      {/* Browse Banked Questions Section */}
+      <Card className="shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5"/> Filter Banked Questions</CardTitle>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
             <div className="relative">
               <Input 
@@ -134,7 +340,7 @@ export default function QuestionBankPage() {
               <SelectTrigger><SelectValue placeholder="Filter by Category" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL_FILTER_VALUE}>All Categories</SelectItem>
-                {uniqueCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                {uniqueCategories.map(cat => <SelectItem key={`browse-cat-${cat}`} value={cat}>{cat}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={selectedTypeFilter} onValueChange={setSelectedTypeFilter}>
@@ -142,7 +348,7 @@ export default function QuestionBankPage() {
               <SelectContent>
                 <SelectItem value={ALL_FILTER_VALUE}>All Types</SelectItem>
                 {uniqueTypes.map(type => (
-                  <SelectItem key={type} value={type}>
+                  <SelectItem key={`browse-type-${type}`} value={type}>
                     {questionTypeLabels[type as ExtractedQuestion['questionType']]}
                   </SelectItem>
                 ))}
@@ -159,9 +365,9 @@ export default function QuestionBankPage() {
                 Go to "Extract Questions" to add questions from your PDFs.
               </p>
             </div>
-          ) : filteredQuestions.length > 0 ? (
+          ) : filteredBankQuestions.length > 0 ? (
             <div className="space-y-4">
-              {filteredQuestions.map((question) => {
+              {filteredBankQuestions.map((question) => {
                 const isInAssembly = isQuestionInAssembly(question.id);
                 const isMCQ = question.questionType === 'mcq';
                 return (
@@ -285,3 +491,6 @@ export default function QuestionBankPage() {
     </TooltipProvider>
   );
 }
+
+
+    
