@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import type { ExtractedQuestion as AIExtractedQuestion, SaveQuestionToBankOutput, SuggestMcqAnswerInput, SuggestMcqAnswerOutput, SuggestExplanationInput, SuggestExplanationOutput } from '@/lib/types'; // Use AI types here
+import type { ExtractedQuestion as AIExtractedQuestion, SaveQuestionToBankOutput, SuggestMcqAnswerInput, SuggestMcqAnswerOutput, SuggestExplanationInput, SuggestExplanationOutput } from '@/lib/types'; 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,13 +19,13 @@ import { saveQuestionToBankAction, suggestMcqAnswerAction, suggestExplanationAct
 import { Separator } from '../ui/separator';
 import { MathText } from '../ui/MathText';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
-import { useQuestionBank } from '@/contexts/QuestionBankContext';
+// import { useQuestionBank } from '@/contexts/QuestionBankContext'; // Removed as bank is now DB driven
 
 // Re-define ExtractedQuestion type to include the client-side `id`
-type ExtractedQuestion = AIExtractedQuestion & { id: string };
+type ExtractedQuestion = AIExtractedQuestion & { id: string }; // This id is client-generated during extraction
 
 interface ExtractedQuestionsDisplayProps {
-  extractionResult: { extractedQuestions: ExtractedQuestion[] }; // Ensure this matches the type from action
+  extractionResult: { extractedQuestions: ExtractedQuestion[] }; 
 }
 
 const questionTypeLabels: Record<ExtractedQuestion['questionType'], string> = {
@@ -37,23 +37,23 @@ const questionTypeLabels: Record<ExtractedQuestion['questionType'], string> = {
 };
 
 type QuestionSaveStateType = {
-  [questionId: string]: {
+  [clientQuestionId: string]: { // Using client-generated ID as key
     isLoading: boolean;
-    isSaved: boolean;
+    isSaved: boolean; // Indicates if this specific instance was successfully saved to DB
+    dbId?: string; // Stores the Firestore document ID after saving
     error?: string;
   }
 };
 
-// This will be used for the edit dialog's state
-type EditableQuestionData = Omit<ExtractedQuestion, 'id' | 'questionType'> & {
-  id?: string;
+type EditableQuestionData = Omit<ExtractedQuestion, 'id' | 'questionType' | 'userId' | 'createdAt'> & {
+  id?: string; // This will be the client-generated ID
   questionType?: ExtractedQuestion['questionType'];
 };
 
 
 export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestionsDisplayProps) {
   const { toast } = useToast();
-  const { bankedQuestions, addQuestionToBank } = useQuestionBank();
+  // const { addQuestionToBank } = useQuestionBank(); // Removed
 
   const [editableQuestions, setEditableQuestions] = useState<ExtractedQuestion[]>([]);
   const [saveStates, setSaveStates] = useState<QuestionSaveStateType>({});
@@ -77,16 +77,14 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     if (extractionResult && extractionResult.extractedQuestions) {
       setEditableQuestions(extractionResult.extractedQuestions);
       const initialSaveStates: QuestionSaveStateType = {};
+      // Initialize save states for newly extracted questions.
+      // "isSaved" here means "successfully saved in this session", not "exists in DB from a previous session"
       extractionResult.extractedQuestions.forEach(eq => {
-        if (bankedQuestions.some(bq => bq.id === eq.id)) {
-          initialSaveStates[eq.id] = { isLoading: false, isSaved: true };
-        } else {
-          initialSaveStates[eq.id] = { isLoading: false, isSaved: false };
-        }
+        initialSaveStates[eq.id] = { isLoading: false, isSaved: false };
       });
       setSaveStates(initialSaveStates);
     }
-  }, [extractionResult, bankedQuestions]);
+  }, [extractionResult]);
 
   useEffect(() => {
     if (currentQuestionForEdit) {
@@ -165,27 +163,31 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   const triggerSaveProcess = useCallback(async (questionToSave: ExtractedQuestion): Promise<boolean> => {
     setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: true, isSaved: false } }));
 
+    // Prepare data for saving, excluding client-side 'id' and fields added by DB
+    const { id: clientId, userId, createdAt, ...dataToSave } = questionToSave;
+
     if (!isSavingAll) { 
       toast({
         title: "Saving Question...",
-        description: `Attempting to save question "${questionToSave.questionText.substring(0, 30)}..." to bank.`,
+        description: `Attempting to save question "${dataToSave.questionText.substring(0, 30)}..." to database.`,
       });
     }
 
     try {
-      const result: SaveQuestionToBankOutput = await saveQuestionToBankAction(questionToSave);
-      if (result.success) {
-        setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: false, isSaved: true } }));
-        addQuestionToBank(questionToSave); 
+      // Pass data without client-side ID to the action
+      const result: SaveQuestionToBankOutput = await saveQuestionToBankAction(dataToSave);
+      if (result.success && result.questionId) {
+        setSaveStates(prev => ({ ...prev, [clientId]: { isLoading: false, isSaved: true, dbId: result.questionId } }));
+        // Client-side context addQuestionToBank is removed. Bank page will refetch.
         if (!isSavingAll) {
           toast({
-            title: "Question Saved",
-            description: result.message || `Question "${questionToSave.questionText.substring(0, 30)}..." saved.`,
+            title: "Question Saved to Database",
+            description: result.message || `Question "${dataToSave.questionText.substring(0, 30)}..." saved.`,
           });
         }
         return true;
       } else {
-        setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: false, isSaved: false, error: result.message } }));
+        setSaveStates(prev => ({ ...prev, [clientId]: { isLoading: false, isSaved: false, error: result.message } }));
         if (!isSavingAll) {
           toast({
             variant: "destructive",
@@ -197,7 +199,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during save.";
-      setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: false, isSaved: false, error: errorMessage } }));
+      setSaveStates(prev => ({ ...prev, [clientId]: { isLoading: false, isSaved: false, error: errorMessage } }));
       if (!isSavingAll) {
         toast({
           variant: "destructive",
@@ -207,7 +209,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       }
       return false;
     }
-  }, [toast, addQuestionToBank, isSavingAll]);
+  }, [toast, isSavingAll]);
 
 
   const handleOpenEditDialog = (questionId: string) => {
@@ -224,8 +226,8 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       return;
     }
 
-    const questionToSave: ExtractedQuestion = {
-      ...currentQuestionForEdit,
+    const questionWithEdits: ExtractedQuestion = {
+      ...currentQuestionForEdit, // Includes client-side 'id'
       questionText: editedData.questionText || currentQuestionForEdit.questionText,
       options: editedData.options || currentQuestionForEdit.options,
       answer: editedData.answer || currentQuestionForEdit.answer,
@@ -239,10 +241,11 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       questionType: editedData.questionType || currentQuestionForEdit.questionType,
     };
     
-    setEditableQuestions(prev => prev.map(q => q.id === questionToSave.id ? questionToSave : q));
+    // Update the question in the local editableQuestions state
+    setEditableQuestions(prev => prev.map(q => q.id === questionWithEdits.id ? questionWithEdits : q));
     setIsEditDialogOpen(false);
     
-    await triggerSaveProcess(questionToSave); 
+    await triggerSaveProcess(questionWithEdits); 
     setCurrentQuestionForEdit(null);
   };
 
@@ -258,12 +261,13 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     setIsSavingAll(true);
     toast({
       title: "Batch Saving Started",
-      description: `Attempting to save ${unsavedFilteredQuestions.length} question(s)... This will save them as-is without individual review.`,
+      description: `Attempting to save ${unsavedFilteredQuestions.length} question(s)...`,
     });
 
     let successCount = 0;
     let failureCount = 0;
 
+    // Use the questions from editableQuestions that are also in unsavedFilteredQuestions
     const questionsToProcess = editableQuestions.filter(eq => 
         unsavedFilteredQuestions.some(ufq => ufq.id === eq.id)
     );
@@ -283,7 +287,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     setIsSavingAll(false);
     toast({
       title: "Batch Save Complete",
-      description: `${successCount} question(s) saved to bank. ${failureCount > 0 ? `${failureCount} failed.` : ''}`,
+      description: `${successCount} question(s) saved to database. ${failureCount > 0 ? `${failureCount} failed.` : ''}`,
       variant: failureCount > 0 && successCount === 0 ? "destructive" : failureCount > 0 ? "default" : "default",
       duration: 5000,
     });
@@ -344,11 +348,12 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   const handleSuggestAllMissingAnswers = async () => {
     const mcqsWithoutAnswers = filteredQuestions.filter(q =>
       q.questionType === 'mcq' &&
-      (!q.answer || q.answer.trim() === '' || (q.options && !q.options.includes(q.answer)))
+      (!q.answer || q.answer.trim() === '' || (q.options && !q.options.includes(q.answer))) &&
+      !saveStates[q.id]?.isSaved // Only suggest for unsaved questions to avoid re-processing
     );
 
     if (mcqsWithoutAnswers.length === 0) {
-      toast({ title: "No Action Needed", description: "All filtered MCQs already have answers or no MCQs to suggest for." });
+      toast({ title: "No Action Needed", description: "All filtered & unsaved MCQs already have answers or no MCQs to suggest for." });
       return;
     }
 
@@ -372,30 +377,27 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
 
     const results = await Promise.allSettled(suggestionsPromises);
 
-    setEditableQuestions(currentEditableQuestions => {
-      const newEditableQuestions = [...currentEditableQuestions];
+    setEditableQuestions(currentEditableQs => {
+      const newEditableQs = [...currentEditableQs];
       results.forEach(settledResult => {
         if (settledResult.status === 'fulfilled') {
           const { id, suggestedAnswer, error } = settledResult.value;
           if (suggestedAnswer) {
-            const questionIndex = newEditableQuestions.findIndex(q => q.id === id);
-            if (questionIndex !== -1 && newEditableQuestions[questionIndex].options?.includes(suggestedAnswer)) {
-              newEditableQuestions[questionIndex] = { ...newEditableQuestions[questionIndex], answer: suggestedAnswer };
+            const questionIndex = newEditableQs.findIndex(q => q.id === id);
+            if (questionIndex !== -1 && newEditableQs[questionIndex].options?.includes(suggestedAnswer)) {
+              newEditableQs[questionIndex] = { ...newEditableQs[questionIndex], answer: suggestedAnswer };
               successCount++;
             } else {
                 failureCount++;
-                console.error(`AI suggested answer for ${id} was not a valid option or question not found.`);
             }
           } else {
             failureCount++;
-            console.error(`Failed to suggest answer for ${id}: ${error}`);
           }
         } else {
           failureCount++;
-          console.error(`Promise rejected for an AI suggestion: ${settledResult.reason}`);
         }
       });
-      return newEditableQuestions;
+      return newEditableQs;
     });
 
     toast({
@@ -408,11 +410,12 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
 
   const handleSuggestAllMissingExplanations = async () => {
     const questionsWithoutExplanations = filteredQuestions.filter(q =>
-      !q.explanation || q.explanation.trim() === ''
+      (!q.explanation || q.explanation.trim() === '') &&
+      !saveStates[q.id]?.isSaved // Only suggest for unsaved questions
     );
 
     if (questionsWithoutExplanations.length === 0) {
-      toast({ title: "No Action Needed", description: "All filtered questions already have explanations." });
+      toast({ title: "No Action Needed", description: "All filtered & unsaved questions already have explanations." });
       return;
     }
 
@@ -438,27 +441,25 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
 
     const results = await Promise.allSettled(explanationPromises);
 
-    setEditableQuestions(currentEditableQuestions => {
-      const newEditableQuestions = [...currentEditableQuestions];
+    setEditableQuestions(currentEditableQs => {
+      const newEditableQs = [...currentEditableQs];
       results.forEach(settledResult => {
         if (settledResult.status === 'fulfilled') {
           const { id, suggestedExplanation, error } = settledResult.value;
           if (suggestedExplanation) {
-            const questionIndex = newEditableQuestions.findIndex(q => q.id === id);
+            const questionIndex = newEditableQs.findIndex(q => q.id === id);
             if (questionIndex !== -1) {
-              newEditableQuestions[questionIndex] = { ...newEditableQuestions[questionIndex], explanation: suggestedExplanation };
+              newEditableQs[questionIndex] = { ...newEditableQs[questionIndex], explanation: suggestedExplanation };
               successCount++;
             }
           } else {
             failureCount++;
-             console.error(`Failed to suggest explanation for ${id}: ${error}`);
           }
         } else {
           failureCount++;
-          console.error(`Promise rejected for an AI explanation suggestion: ${settledResult.reason}`);
         }
       });
-      return newEditableQuestions;
+      return newEditableQs;
     });
     
     toast({
@@ -536,7 +537,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
         <div className="flex flex-col sm:flex-row justify-end gap-2 flex-wrap">
           <Button
             onClick={handleSuggestAllMissingAnswers}
-            disabled={isSuggestingAllAnswers || filteredQuestions.filter(q => q.questionType === 'mcq' && (!q.answer || q.answer.trim() === '' || (q.options && !q.options.includes(q.answer)))).length === 0}
+            disabled={isSuggestingAllAnswers || filteredQuestions.filter(q => q.questionType === 'mcq' && !saveStates[q.id]?.isSaved && (!q.answer || q.answer.trim() === '' || (q.options && !q.options.includes(q.answer)))).length === 0}
             variant="outline"
             size="sm"
           >
@@ -545,11 +546,11 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
             ) : (
               <WandSparkles className="mr-2 h-4 w-4" />
             )}
-            {isSuggestingAllAnswers ? "Suggesting Answers..." : `AI Suggest Missing Answers (${filteredQuestions.filter(q => q.questionType === 'mcq' && (!q.answer || q.answer.trim() === '' || (q.options && !q.options.includes(q.answer)))).length})`}
+            {isSuggestingAllAnswers ? "Suggesting Answers..." : `AI Suggest Missing Answers (${filteredQuestions.filter(q => q.questionType === 'mcq' && !saveStates[q.id]?.isSaved && (!q.answer || q.answer.trim() === '' || (q.options && !q.options.includes(q.answer)))).length})`}
           </Button>
           <Button
             onClick={handleSuggestAllMissingExplanations}
-            disabled={isSuggestingAllExplanations || filteredQuestions.filter(q => !q.explanation || q.explanation.trim() === '').length === 0}
+            disabled={isSuggestingAllExplanations || filteredQuestions.filter(q => (!q.explanation || q.explanation.trim() === '') && !saveStates[q.id]?.isSaved).length === 0}
             variant="outline"
             size="sm"
           >
@@ -558,7 +559,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
             ) : (
               <WandSparkles className="mr-2 h-4 w-4" />
             )}
-            {isSuggestingAllExplanations ? "Suggesting Explanations..." : `AI Suggest Missing Explanations (${filteredQuestions.filter(q => !q.explanation || q.explanation.trim() === '').length})`}
+            {isSuggestingAllExplanations ? "Suggesting Explanations..." : `AI Suggest Missing Explanations (${filteredQuestions.filter(q => (!q.explanation || q.explanation.trim() === '') && !saveStates[q.id]?.isSaved).length})`}
           </Button>
           <Button
             onClick={handleSaveAllUnsaved}
@@ -601,7 +602,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                     {item.marks !== undefined && <Badge variant="outline" className="flex items-center gap-1"><SigmaSquare className="h-3 w-3" /> {item.marks}</Badge>}
                     <Badge variant="outline">{questionTypeLabels[item.questionType]}</Badge>
                     <Badge variant="secondary">{item.suggestedCategory}</Badge>
-                    {currentSaveState.isSaved && <Badge variant="default" className="bg-green-600 hover:bg-green-700">Saved</Badge>}
+                    {currentSaveState.isSaved && <Badge variant="default" className="bg-green-600 hover:bg-green-700">Saved to DB</Badge>}
                   </div>
                 </div>
               </AccordionTrigger>
@@ -715,7 +716,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
             <DialogHeader>
               <DialogTitle>Review & Edit Question</DialogTitle>
               <DialogDescription>
-                Make any necessary changes to the extracted question details before saving.
+                Make any necessary changes to the extracted question details before saving to the database.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4 overflow-y-auto flex-grow pr-2">
@@ -723,8 +724,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                 <Label htmlFor="editText" className="font-semibold">Question Text</Label>
                 <Textarea id="editText" value={editedData.questionText || ''} onChange={(e) => handleInputChange('questionText', e.target.value)} className="mt-1 min-h-[100px]" />
               </div>
-
-              {/* Answer/Options Editing Section based on Question Type */}
+             
               {editedData.questionType === 'mcq' && (
                 <>
                   <div>
@@ -793,8 +793,6 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                    <p className="text-xs text-muted-foreground mt-1">Question type is 'unknown'. Please verify and consider changing the type if possible before saving.</p>
                 </div>
               )}
-              {/* End of Answer/Options Editing Section */}
-
 
               <div>
                 <Label htmlFor="editExplanation" className="font-semibold">Explanation</Label>
@@ -846,7 +844,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
               <DialogClose asChild>
                 <Button variant="outline">Cancel</Button>
               </DialogClose>
-              <Button onClick={handleConfirmSaveFromDialog}>Confirm & Save to Bank</Button>
+              <Button onClick={handleConfirmSaveFromDialog}>Confirm & Save to Database</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -854,5 +852,3 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     </div>
   );
 }
-
-    

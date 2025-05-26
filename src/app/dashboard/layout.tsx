@@ -44,7 +44,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import React, { useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { QuestionBankProvider } from '@/contexts/QuestionBankContext';
+// import { QuestionBankProvider } from '@/contexts/QuestionBankContext'; // Removed
 import { QuizAssemblyProvider } from '@/contexts/QuizAssemblyContext';
 import { QuizSessionProvider } from '@/contexts/QuizSessionContext';
 
@@ -92,7 +92,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   
   return (
     <QuizSessionProvider>
-      <QuestionBankProvider>
+      {/* <QuestionBankProvider> // Removed QuestionBankProvider */}
         <QuizAssemblyProvider> 
           <SidebarProvider defaultOpen>
             <SidebarDecorated>
@@ -100,7 +100,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </SidebarDecorated>
           </SidebarProvider>
         </QuizAssemblyProvider>
-      </QuestionBankProvider>
+      {/* </QuestionBankProvider> // Removed QuestionBankProvider */}
     </QuizSessionProvider>
   );
 }
@@ -228,8 +228,6 @@ function SidebarDecorated({ children }: { children: React.ReactNode }) {
         </SidebarFooter>
       </Sidebar>
       
-      {/* The SidebarInset is the main content area */}
-      {/* Changed: Removed md:ml-[var(--sidebar-width)], peer-data-..., and transition classes */}
       <div className="flex-1">
         {children}
       </div>

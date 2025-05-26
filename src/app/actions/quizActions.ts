@@ -8,7 +8,7 @@ import {
 } from "@/ai/flows/generate-custom-quiz";
 import { 
   generateQuizFromPdf as genQuizFromPdfAI, 
-  type GenerateQuizFromPdfInput as GenQuizFromPdfAIInput, // Aliased to avoid conflict 
+  type GenerateQuizFromPdfInput as GenQuizFromPdfAIInput, 
   type GenerateQuizFromPdfOutput 
 } from "@/ai/flows/generate-quiz-from-pdf";
 import { 
@@ -18,7 +18,7 @@ import {
 } from "@/ai/flows/evaluate-short-answer";
 import {
   extractQuestionsFromPdf as extractQuestionsAI,
-  type ExtractQuestionsFromPdfInput as AIExtractQuestionsInput, // Aliased to avoid conflict
+  type ExtractQuestionsFromPdfInput as AIExtractQuestionsInput, 
   type ExtractQuestionsFromPdfOutput as AIExtractQuestionsOutput, 
 } from "@/ai/flows/extract-questions-from-pdf-flow";
 import {
@@ -38,8 +38,10 @@ import type {
   ExtractedQuestion, 
   ExtractQuestionsFromPdfOutput, 
   SaveQuestionToBankOutput,
-  ExtractQuestionsFromPdfInput // This is the type for our action's input
+  ExtractQuestionsFromPdfInput,
+  BankedQuestionFromDB
 } from "@/lib/types"; 
+import { db, auth, collection, addDoc, serverTimestamp, query, where, getDocs, doc, deleteDoc, Timestamp } from "@/lib/firebase"; // Firebase imports
 
 export async function generateCustomQuizAction(input: GenerateCustomQuizInput): Promise<CustomQuizGenOutput> {
   try {
@@ -75,10 +77,8 @@ export async function evaluateShortAnswerAction(input: EvaluateShortAnswerInput)
   }
 }
 
-// Use the specific input type from lib/types for the action
 export async function extractQuestionsFromPdfAction(input: ExtractQuestionsFromPdfInput): Promise<ExtractQuestionsFromPdfOutput> {
   try {
-    // The input here matches ExtractQuestionsFromPdfInput from lib/types.ts, which now includes the boolean flags
     const result: AIExtractQuestionsOutput = await extractQuestionsAI(input as AIExtractQuestionsInput);
     
     if (!result || !Array.isArray(result.extractedQuestions)) {
@@ -86,38 +86,94 @@ export async function extractQuestionsFromPdfAction(input: ExtractQuestionsFromP
       throw new Error('AI returned an invalid format for extracted questions.');
     }
 
-    const questionsWithIds: ExtractedQuestion[] = result.extractedQuestions.map((q, index) => ({
+    // Client-side ID generation for UI keying during extraction phase
+    const questionsWithClientIds: ExtractedQuestion[] = result.extractedQuestions.map((q, index) => ({
       ...q,
       id: `extracted-${Date.now()}-${index}`, 
     }));
-    return { extractedQuestions: questionsWithIds };
+    return { extractedQuestions: questionsWithClientIds };
   } catch (error) {
     console.error("Error in extractQuestionsFromPdfAction:", error);
     if (error instanceof Error && error.message.includes("AI failed to return a valid structure")) {
-      throw error; // Re-throw specific AI error
+      throw error; 
     }
     throw new Error("Failed to extract questions from PDF. Please check the PDF or try again.");
   }
 }
 
-export async function saveQuestionToBankAction(question: ExtractedQuestion): Promise<SaveQuestionToBankOutput> {
-  console.log("Attempting to save question to bank (simulated):", question.id, question.questionText);
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  if (question.questionText.toLowerCase().includes("fail")) { 
-    console.error("Simulated failure saving question:", question.id);
-    throw new Error(`Simulated error: Could not save question "${question.questionText.substring(0,20)}..."`);
+export async function saveQuestionToBankAction(questionData: Omit<ExtractedQuestion, 'id' | 'userId' | 'createdAt'>): Promise<SaveQuestionToBankOutput> {
+  if (!auth.currentUser) {
+    throw new Error("User not authenticated. Cannot save question to bank.");
   }
+  const userId = auth.currentUser.uid;
 
-  const newQuestionIdInBank = `bank-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-  console.log("Question (simulated) saved with bank ID:", newQuestionIdInBank);
-
-  return {
-    success: true,
-    questionId: newQuestionIdInBank,
-    message: `Question "${question.questionText.substring(0, 30)}..." (simulated) saved to bank.`,
-  };
+  try {
+    const questionToSave = {
+      ...questionData,
+      userId,
+      createdAt: serverTimestamp(), // Firestore server-side timestamp
+    };
+    const docRef = await addDoc(collection(db, "questions"), questionToSave);
+    console.log("Question saved to Firestore with ID:", docRef.id);
+    return {
+      success: true,
+      questionId: docRef.id,
+      message: `Question "${questionData.questionText.substring(0, 30)}..." saved to bank.`,
+    };
+  } catch (error) {
+    console.error("Error saving question to Firestore:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred saving to database.";
+    throw new Error(`Failed to save question to bank: ${errorMessage}`);
+  }
 }
+
+export async function getBankedQuestionsForUserAction(): Promise<BankedQuestionFromDB[]> {
+  if (!auth.currentUser) {
+    console.warn("User not authenticated. Returning empty question bank.");
+    return [];
+  }
+  const userId = auth.currentUser.uid;
+
+  try {
+    const q = query(collection(db, "questions"), where("userId", "==", userId));
+    const querySnapshot = await getDocs(q);
+    const questions: BankedQuestionFromDB[] = [];
+    querySnapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      questions.push({
+        ...data,
+        id: docSnap.id,
+        // Ensure createdAt is a serializable format (ISO string)
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : String(data.createdAt || new Date().toISOString()),
+      } as BankedQuestionFromDB);
+    });
+    // Sort by creation date, newest first
+    questions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return questions;
+  } catch (error) {
+    console.error("Error fetching questions from Firestore:", error);
+    throw new Error("Failed to fetch questions from bank.");
+  }
+}
+
+export async function removeQuestionFromBankAction(questionDocId: string): Promise<{success: boolean, message: string}> {
+  if (!auth.currentUser) {
+    throw new Error("User not authenticated. Cannot remove question.");
+  }
+  // Firestore rules should be the primary way to ensure a user can only delete their own questions.
+  // For an additional layer, you could fetch the doc first and check userId, but that's an extra read.
+  try {
+    await deleteDoc(doc(db, "questions", questionDocId));
+    return {
+      success: true,
+      message: "Question successfully removed from the bank.",
+    };
+  } catch (error) {
+    console.error("Error removing question from Firestore:", error);
+    throw new Error("Failed to remove question from bank.");
+  }
+}
+
 
 export async function suggestMcqAnswerAction(input: SuggestMcqAnswerInput): Promise<SuggestMcqAnswerOutput> {
   try {

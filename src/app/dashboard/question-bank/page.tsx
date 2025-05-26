@@ -11,9 +11,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare, PlusCircle, MinusCircle, PlayCircle, Trash2, PackagePlus, Wand2, ArrowLeft, Loader2, Info, Eye, AlertTriangle, BookText } from 'lucide-react';
-import type { ExtractedQuestion, Quiz as QuizType, MCQ as MCQType } from '@/lib/types'; 
+import type { ExtractedQuestion, Quiz as QuizType, MCQ as MCQType, BankedQuestionFromDB } from '@/lib/types'; 
 import { MathText } from '@/components/ui/MathText';
-import { useQuestionBank } from '@/contexts/QuestionBankContext';
+// import { useQuestionBank } from '@/contexts/QuestionBankContext'; // Removed
+import { getBankedQuestionsForUserAction, removeQuestionFromBankAction } from '@/app/actions/quizActions';
 import { useQuizAssembly } from '@/contexts/QuizAssemblyContext';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { QuizDisplay } from '@/components/quiz/QuizDisplay';
@@ -48,7 +49,9 @@ interface CriteriaQuizFormState {
 }
 
 export default function QuestionBankPage() {
-  const { bankedQuestions, removeQuestionFromBank } = useQuestionBank();
+  const [bankedQuestions, setBankedQuestions] = useState<BankedQuestionFromDB[]>([]);
+  const [isLoadingBank, setIsLoadingBank] = useState(true);
+
   const { 
     addQuestionToAssembly, 
     removeQuestionFromAssembly, 
@@ -79,7 +82,47 @@ export default function QuestionBankPage() {
   const [lastCriteriaKeyForPool, setLastCriteriaKeyForPool] = useState<string | null>(null);
 
   const [isViewDetailsDialogOpen, setIsViewDetailsDialogOpen] = useState(false);
-  const [currentQuestionForView, setCurrentQuestionForView] = useState<ExtractedQuestion | null>(null);
+  const [currentQuestionForView, setCurrentQuestionForView] = useState<BankedQuestionFromDB | null>(null);
+
+  useEffect(() => {
+    async function fetchBank() {
+      setIsLoadingBank(true);
+      try {
+        const questions = await getBankedQuestionsForUserAction();
+        setBankedQuestions(questions);
+      } catch (error) {
+        toast({
+          title: "Error Fetching Question Bank",
+          description: error instanceof Error ? error.message : "Could not load questions from your bank.",
+          variant: "destructive",
+        });
+        setBankedQuestions([]);
+      } finally {
+        setIsLoadingBank(false);
+      }
+    }
+    fetchBank();
+  }, [toast]);
+
+  const handleRemoveQuestion = async (questionDocId: string) => {
+    const questionToRemove = bankedQuestions.find(q => q.id === questionDocId);
+    if (!questionToRemove) return;
+
+    try {
+      await removeQuestionFromBankAction(questionDocId);
+      setBankedQuestions(prev => prev.filter(q => q.id !== questionDocId));
+      toast({
+        title: "Question Removed",
+        description: `"${questionToRemove.questionText.substring(0,30)}..." removed from database.`,
+      });
+    } catch (error) {
+       toast({
+        title: "Error Removing Question",
+        description: error instanceof Error ? error.message : "Could not remove question.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const uniqueCategories = React.useMemo(() => 
     Array.from(new Set(bankedQuestions.map(q => q.suggestedCategory))).sort(), 
@@ -156,13 +199,13 @@ export default function QuestionBankPage() {
       
       return matchesDescription && matchesTags && matchesCategory;
     });
-
+    
     const validQuizMcqs: MCQType[] = initialMatchingExtractedQuestions
       .map(eq => ({
-        id: eq.id,
+        id: eq.id, // This is now Firestore doc ID
         question: eq.questionText,
         options: eq.options ? [...eq.options] : [],
-        answer: typeof eq.answer === 'string' ? eq.answer : "",
+        answer: typeof eq.answer === 'string' ? eq.answer.trim() : "",
         explanation: eq.explanation || "No explanation provided.",
         type: 'mcq' as const, 
       }))
@@ -293,7 +336,7 @@ export default function QuestionBankPage() {
   };
 
   const handleStartAssembledQuiz = () => {
-    const assembled = getAssembledQuestions();
+    const assembled = getAssembledQuestions(); // These are ExtractedQuestion from context
     if (assembled.length === 0) {
       toast({
         title: "Assembly Empty",
@@ -305,8 +348,8 @@ export default function QuestionBankPage() {
 
     const mcqQuestionsForQuiz: MCQType[] = assembled
       .filter(eq => eq.questionType === 'mcq') 
-      .map(eq => ({
-        id: eq.id,
+      .map(eq => ({ // eq is ExtractedQuestion from assembly (client ID or DB ID if saved)
+        id: eq.id, 
         question: eq.questionText,
         options: eq.options ? [...eq.options] : [], 
         answer: typeof eq.answer === 'string' ? eq.answer.trim() : "", 
@@ -346,7 +389,7 @@ export default function QuestionBankPage() {
     clearAssembly({ suppressToast: true }); 
   };
 
-  const handleOpenViewDetails = (question: ExtractedQuestion) => {
+  const handleOpenViewDetails = (question: BankedQuestionFromDB) => {
     setCurrentQuestionForView(question);
     setIsViewDetailsDialogOpen(true);
   };
@@ -378,7 +421,7 @@ export default function QuestionBankPage() {
           <LibraryBig className="h-10 w-10 text-primary" />
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Question Bank</h1>
-            <p className="text-muted-foreground">Browse, search, manage questions, and generate quizzes.</p>
+            <p className="text-muted-foreground">Browse questions from your personal bank, manage them, and generate quizzes.</p>
           </div>
         </div>
       </header>
@@ -407,10 +450,10 @@ export default function QuestionBankPage() {
 
       <Accordion type="single" collapsible defaultValue="criteria-quiz" className="w-full">
         <AccordionItem value="criteria-quiz">
-          <AccordionTrigger className="p-0">
-            <CardHeader className="w-full pb-2">
+          <AccordionTrigger className="p-0 hover:no-underline">
+            <CardHeader className="w-full pb-2 text-left">
               <CardTitle className="text-xl flex items-center gap-2"><Wand2 className="h-6 w-6 text-primary"/>Start Quiz by Criteria</CardTitle>
-              <CardDescription>Generate a quiz from banked MCQs based on your specifications. The system will try to cycle through all matching questions before repeating.</CardDescription>
+              <CardDescription>Generate a quiz from your banked MCQs based on specifications. The system cycles through matching questions.</CardDescription>
             </CardHeader>
           </AccordionTrigger>
           <AccordionContent>
@@ -544,12 +587,17 @@ export default function QuestionBankPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {bankedQuestions.length === 0 && searchTerm === '' && selectedCategoryFilter === ALL_FILTER_VALUE && selectedTypeFilter === ALL_FILTER_VALUE && tagSearchTerm === '' ? (
+          {isLoadingBank ? (
+            <div className="flex justify-center items-center py-10">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <p className="ml-3 text-muted-foreground">Loading your question bank...</p>
+            </div>
+          ) : bankedQuestions.length === 0 && searchTerm === '' && selectedCategoryFilter === ALL_FILTER_VALUE && selectedTypeFilter === ALL_FILTER_VALUE && tagSearchTerm === '' ? (
              <div className="text-center py-10">
               <LibraryBig className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
               <p className="text-xl font-medium text-muted-foreground">Your Question Bank is Empty</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Go to "Extract Questions" to add questions from your PDFs.
+                Go to "Extract Questions" to add questions from your PDFs to the database.
               </p>
             </div>
           ) : filteredBankQuestions.length > 0 ? (
@@ -566,7 +614,7 @@ export default function QuestionBankPage() {
                             </div>
                             <div className="flex items-center gap-2 mt-2 md:mt-0 flex-shrink-0 flex-wrap">
                                 {question.marks !== undefined && (
-                                    <Badge variant="outline" className="flex items-center gap-1 text-xs">
+                                    <Badge variant="outline" className="text-xs flex items-center gap-1">
                                         <SigmaSquare className="h-3 w-3"/> {question.marks} Marks
                                     </Badge>
                                 )}
@@ -633,12 +681,12 @@ export default function QuestionBankPage() {
                                             variant="outline" 
                                             size="sm" 
                                             className="text-red-500 hover:bg-red-500/10 hover:text-red-600 border-red-500/50"
-                                            onClick={() => removeQuestionFromBank(question.id)}
+                                            onClick={() => handleRemoveQuestion(question.id)}
                                         >
                                             <Trash2 className="mr-2 h-4 w-4" /> Remove
                                         </Button>
                                     </TooltipTrigger>
-                                    <TooltipContent><p>Remove this question from your current session's bank.</p></TooltipContent>
+                                    <TooltipContent><p>Remove this question from your database.</p></TooltipContent>
                                 </Tooltip>
 
                                 {!isMCQ ? (
@@ -664,7 +712,7 @@ export default function QuestionBankPage() {
                                         variant="default" 
                                         size="sm" 
                                         className="ml-2 bg-primary hover:bg-primary/90"
-                                        onClick={() => addQuestionToAssembly(question)}
+                                        onClick={() => addQuestionToAssembly(question)} // Pass the whole BankedQuestionFromDB
                                     >
                                         <PlusCircle className="mr-2 h-4 w-4" /> Add to New Quiz
                                     </Button>
@@ -680,7 +728,7 @@ export default function QuestionBankPage() {
             <div className="text-center py-10">
               <Search className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
               <p className="text-muted-foreground">No questions found matching your criteria.</p>
-              <p className="text-xs text-muted-foreground mt-1">Try adjusting your filters.</p>
+              <p className="text-xs text-muted-foreground mt-1">Try adjusting your filters or adding more questions to your bank.</p>
             </div>
           )}
         </CardContent>
@@ -688,18 +736,20 @@ export default function QuestionBankPage() {
        <Card className="mt-8 shadow-sm border-dashed">
             <CardHeader>
                 <CardTitle className="text-xl">Note on Data Persistence</CardTitle>
-                <CardDescription>Questions added to this bank are stored in your browser's memory for this session only.</CardDescription>
+                <CardDescription>Questions in this bank are stored in your personal cloud database (Firestore).</CardDescription>
             </CardHeader>
             <CardContent>
                 <p className="text-muted-foreground">
-                    Refreshing the page or closing your browser will clear the banked questions.
-                    Future updates will enable:
+                    They will persist across sessions. Future updates may include:
                 </p>
                 <ul className="list-disc list-inside text-muted-foreground mt-2 space-y-1 text-sm">
-                    <li>Persistent storage of questions in a database.</li>
-                    <li>Manually adding and editing questions directly in the bank.</li>
-                    <li>Verification workflows for quality assurance.</li>
+                    <li>Manually adding and editing questions directly in the bank (beyond initial extraction review).</li>
+                    <li>Verification workflows for admin-approved questions for a shared bank.</li>
+                    <li>Advanced sharing options.</li>
                 </ul>
+                 <p className="mt-2 text-xs text-muted-foreground">
+                    Remember to set up Firestore security rules to protect your data.
+                </p>
             </CardContent>
         </Card>
 
@@ -709,7 +759,7 @@ export default function QuestionBankPage() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2"><Info className="h-6 w-6 text-primary" /> Question Details</DialogTitle>
               <DialogDescription>
-                Viewing the full details of the selected question.
+                Viewing the full details of the selected question from your bank.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4 overflow-y-auto flex-grow pr-2">
@@ -788,6 +838,12 @@ export default function QuestionBankPage() {
                       <Badge key={`view-tag-${tag}`} variant="secondary">{tag}</Badge>
                     ))}
                   </div>
+                </div>
+              )}
+              {currentQuestionForView.createdAt && (
+                 <div>
+                  <Label className="font-semibold text-sm">Added to Bank:</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">{new Date(currentQuestionForView.createdAt).toLocaleString()}</p>
                 </div>
               )}
                {!currentQuestionForView.options && currentQuestionForView.questionType === 'mcq' && <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Missing Options</AlertTitle><AlertDescription>This MCQ is missing its options.</AlertDescription></Alert>}

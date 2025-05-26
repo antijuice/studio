@@ -2,7 +2,7 @@
 import type { LucideIcon } from 'lucide-react';
 
 export interface BaseQuestion {
-  id: string;
+  id: string; // Will be Firestore document ID when fetched from DB
   question: string;
   explanation: string;
 }
@@ -97,8 +97,11 @@ export type ShortAnswerEvaluationOutput = {
   feedback: string;
 };
 
+// Represents a question as extracted or stored in the bank.
+// The 'id' will be the Firestore document ID once saved.
+// 'userId' and 'createdAt' are added when saving to Firestore.
 export type ExtractedQuestion = {
-  id: string; 
+  id: string; // Client-generated ID during extraction, Firestore Doc ID once saved/fetched
   questionText: string;
   questionType: 'mcq' | 'short_answer' | 'true_false' | 'fill_in_the_blank' | 'unknown';
   options?: string[];
@@ -108,10 +111,12 @@ export type ExtractedQuestion = {
   suggestedCategory: string;
   relevantImageDescription?: string;
   marks?: number;
+  userId?: string; // Added by server action before saving
+  createdAt?: Date | string; // Stored as Timestamp, converted to ISO string or Date for client
 };
 
 export type ExtractQuestionsFromPdfOutput = {
-  extractedQuestions: ExtractedQuestion[];
+  extractedQuestions: ExtractedQuestion[]; // These will have client-generated IDs
 };
 
 
@@ -144,7 +149,7 @@ export type ExtractQuestionsFromPdfInput = {
 
 export type SaveQuestionToBankOutput = {
   success: boolean;
-  questionId?: string; 
+  questionId?: string; // Firestore document ID
   message: string;
 };
 
@@ -166,4 +171,11 @@ export type SuggestExplanationInput = {
 
 export type SuggestExplanationOutput = {
   suggestedExplanation: string;
+};
+
+// For fetching questions from DB
+export type BankedQuestionFromDB = ExtractedQuestion & {
+  id: string; // Firestore document ID
+  userId: string;
+  createdAt: string; // ISO date string
 };
