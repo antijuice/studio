@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -147,12 +148,30 @@ export default function QuestionBankPage() {
 
     // Shuffle and pick numQuestions
     const shuffled = potentialQuestions.sort(() => 0.5 - Math.random());
-    const selectedQuestions = shuffled.slice(0, criteriaForm.numQuestions) as MCQType[];
+    const selectedExtractedQuestions = shuffled.slice(0, criteriaForm.numQuestions);
 
-    if (selectedQuestions.length === 0) { // Should be caught by above, but as a safeguard
+    // Map ExtractedQuestion to MCQType
+    const mappedQuestions: MCQType[] = selectedExtractedQuestions.map(eq => ({
+      id: eq.id,
+      question: eq.questionText, // Map questionText to question
+      options: eq.options || [], // Ensure options is an array
+      answer: eq.answer || "",   // Ensure answer is a string
+      explanation: eq.explanation || "No explanation provided.",
+      type: 'mcq',
+    })).filter(q => q.options.length > 0 && q.answer !== ""); // Ensure MCQs are valid
+
+    if (mappedQuestions.length < criteriaForm.numQuestions && mappedQuestions.length < selectedExtractedQuestions.length) {
+       toast({
+            title: "Some Questions Invalid",
+            description: `Found ${selectedExtractedQuestions.length} matching questions, but only ${mappedQuestions.length} were valid MCQs. The quiz will proceed with available valid questions.`,
+            variant: "default", // "default" or "warning" if you had one
+         });
+    }
+    
+    if (mappedQuestions.length === 0) {
          toast({
-            title: "Not Enough Questions",
-            description: `Could not find ${criteriaForm.numQuestions} questions matching criteria. Found ${potentialQuestions.length}.`,
+            title: "Not Enough Valid MCQs",
+            description: `Could not find ${criteriaForm.numQuestions} valid MCQs matching criteria. Found ${potentialQuestions.length} initial matches, but none were usable after validation.`,
             variant: "destructive",
          });
          setIsGeneratingQuizByCriteria(false);
@@ -162,7 +181,7 @@ export default function QuestionBankPage() {
     const newQuiz: QuizType = {
       id: `criteria-quiz-${Date.now()}`,
       title: `Quiz based on: ${criteriaForm.description || 'Selected Criteria'}`,
-      questions: selectedQuestions,
+      questions: mappedQuestions, // Use the mapped questions
       createdAt: new Date(),
     };
     setCurrentQuiz(newQuiz);
@@ -203,7 +222,7 @@ export default function QuestionBankPage() {
       </header>
 
       {/* Quiz Assembly Summary Card */}
-      <Card className="shadow-lg sticky top-20 md:top-4 z-20 bg-card/95 backdrop-blur-sm">
+      <Card className="shadow-lg sticky top-4 md:top-20 z-20 bg-card/95 backdrop-blur-sm"> {/* Adjusted top for mobile */}
         <CardHeader>
             <div className="flex justify-between items-center">
                 <CardTitle className="text-xl flex items-center gap-2"><PackagePlus className="h-6 w-6 text-accent"/>Quiz Assembly</CardTitle>
@@ -483,7 +502,6 @@ export default function QuestionBankPage() {
                     <li>Persistent storage of questions in a database.</li>
                     <li>Manually adding and editing questions directly in the bank.</li>
                     <li>Verification workflows for quality assurance.</li>
-                    <li>Using banked questions to generate new custom quizzes.</li>
                 </ul>
             </CardContent>
         </Card>
