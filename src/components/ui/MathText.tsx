@@ -3,6 +3,7 @@
 
 import React from 'react';
 import { InlineMath, BlockMath } from 'react-katex';
+import { cn } from "@/lib/utils"; // Added import for cn
 
 interface MathTextProps {
   text: string | undefined | null;
