@@ -6,7 +6,7 @@ import type { ExtractQuestionsFromPdfOutput, ExtractedQuestion } from '@/lib/typ
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { BookText, CheckCircle, ChevronDown, ChevronUp, Info, ListOrdered, Tag, Type, XCircle } from 'lucide-react';
+import { BookText, CheckCircle, ChevronDown, ChevronUp, Image as ImageIcon, Info, ListOrdered, Tag, Type, XCircle } from 'lucide-react'; // Added ImageIcon
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 interface ExtractedQuestionsDisplayProps {
@@ -81,6 +81,18 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                     <AlertDescription>{item.explanation}</AlertDescription>
                   </Alert>
                 )}
+
+                {item.relevantImageDescription && (
+                  <Alert variant="default" className="mt-2">
+                    <ImageIcon className="h-4 w-4" />
+                    <AlertTitle className="font-semibold">Relevant Image Information</AlertTitle>
+                    <AlertDescription>
+                      {item.relevantImageDescription}
+                      {/* Placeholder for actual image display in the future */}
+                      {/* <img src={item.imageDataUri} alt="Relevant to question" className="mt-2 rounded-md max-h-60 w-auto" /> */}
+                    </AlertDescription>
+                  </Alert>
+                )}
                 
                 <div>
                   <strong><Tag className="inline h-4 w-4 mr-1" />Suggested Tags:</strong>
@@ -99,3 +111,4 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     </div>
   );
 }
+

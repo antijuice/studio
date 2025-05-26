@@ -1,7 +1,7 @@
 
 'use server';
 /**
- * @fileOverview Extracts structured questions, tags, and categories from a PDF document using AI.
+ * @fileOverview Extracts structured questions, tags, categories, and image descriptions from a PDF document using AI.
  *
  * - extractQuestionsFromPdf - A function that processes a PDF and returns extracted questions.
  * - ExtractQuestionsFromPdfInput - The input type for the extractQuestionsFromPdf function.
@@ -54,6 +54,12 @@ const ExtractedQuestionSchema = z.object({
     .describe(
       "A suggested broader academic category for this question (e.g., 'Algebra', 'Cell Biology', 'World War II', 'Literary Analysis')."
     ),
+  relevantImageDescription: z
+    .string()
+    .optional()
+    .describe(
+        "A brief description of a visual element (diagram, chart, image) from the PDF directly associated with this question, if one exists on the same page. Describes what the image shows and its relation to the question."
+    ),
 });
 export type ExtractedQuestion = z.infer<typeof ExtractedQuestionSchema>;
 
@@ -61,7 +67,7 @@ const ExtractQuestionsFromPdfOutputSchema = z.object({
   extractedQuestions: z
     .array(ExtractedQuestionSchema)
     .describe(
-      'An array of question objects, each containing the question details, suggested tags, and a category, extracted from the PDF.'
+      'An array of question objects, each containing the question details, suggested tags, a category, and a description of any relevant image, extracted from the PDF.'
     ),
 });
 export type ExtractQuestionsFromPdfOutput = z.infer<typeof ExtractQuestionsFromPdfOutputSchema>;
@@ -76,22 +82,22 @@ const prompt = ai.definePrompt({
   name: 'extractQuestionsFromPdfPrompt',
   input: {schema: ExtractQuestionsFromPdfInputSchema},
   output: {schema: ExtractQuestionsFromPdfOutputSchema},
-  prompt: `You are an AI assistant specialized in extracting structured information from educational documents.
+  prompt: `You are an AI assistant specialized in extracting structured information from educational documents, including MCQ exams.
 Your task is to analyze the provided PDF document and extract individual quiz questions from it.
-For each question, you must identify its text, determine its type, extract options and the correct answer (if applicable), provide an explanation (if available or inferable), and suggest relevant tags and a category.
+For each question, you must identify its text, determine its type (especially 'mcq' for multiple choice questions), extract options and the correct answer (if applicable), provide an explanation (if available or inferable), suggest relevant tags, a category, and describe any relevant images.
 
 Document Content (from PDF):
 {{media url=pdfDataUri}}
 
 {{#if topicHint}}
-The general topic or context of this document is: {{{topicHint}}}. Use this information to guide your tagging and categorization more accurately.
+The general topic or context of this document is: {{{topicHint}}}. Use this information to guide your tagging, categorization, and image relevance assessment more accurately.
 {{/if}}
 
 Please structure your output as a JSON object strictly adhering to the schema provided for "ExtractQuestionsFromPdfOutput".
 The root object must have a key "extractedQuestions", which is an array of question objects.
 Each question object in the "extractedQuestions" array must have the following fields:
 - "questionText": (string) The full, complete text of the question.
-- "questionType": (enum: 'mcq', 'short_answer', 'true_false', 'fill_in_the_blank', 'unknown') The identified type of the question.
+- "questionType": (enum: 'mcq', 'short_answer', 'true_false', 'fill_in_the_blank', 'unknown') The identified type of the question. Ensure 'mcq' is used for multiple-choice questions.
 - "options": (array of strings, optional) For 'mcq' type, list all multiple choice options. Omit if not an MCQ.
 - "answer": (string, optional) The correct answer.
     - For 'mcq', this must be the full text of the correct option (e.g., "Paris", not "C").
@@ -101,6 +107,7 @@ Each question object in the "extractedQuestions" array must have the following f
 - "explanation": (string, optional) An explanation for the correct answer. If not directly present, try to infer or generate a concise one if possible. Omit if not applicable.
 - "suggestedTags": (array of strings) Provide 3-5 relevant and specific keywords or tags for the question based on its content.
 - "suggestedCategory": (string) Suggest a single, broader academic subject or category for this question (e.g., "Physics", "Literature", "Ancient History", "Calculus", "Organic Chemistry").
+- "relevantImageDescription": (string, optional) Examine the content of the question and its surrounding area on the same page in the PDF. If there is a distinct visual element (like a diagram, chart, photograph, or illustration) that is *directly and highly relevant* to understanding or answering that specific question, provide a brief description of this visual element. For example, 'A diagram of a plant cell with labels for nucleus and chloroplast, relevant to the question about cell organelles.' If no such specific, relevant visual is present for a question, or if it's just decorative or not on the same page, omit this field. Do not attempt to extract image data itself.
 
 Important Instructions:
 - Focus solely on extracting question-answer units. Ignore non-question text like chapter titles, general instructions not part of a specific question, page numbers, or headers/footers.
@@ -128,3 +135,4 @@ const extractQuestionsFromPdfFlow = ai.defineFlow(
     return output;
   }
 );
+

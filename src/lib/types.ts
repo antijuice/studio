@@ -95,6 +95,7 @@ export type ExtractedQuestion = {
   explanation?: string;
   suggestedTags: string[];
   suggestedCategory: string;
+  relevantImageDescription?: string; // Added new field
 };
 
 export type ExtractQuestionsFromPdfOutput = {
@@ -126,3 +127,4 @@ export type ExtractQuestionsFromPdfInput = {
   pdfDataUri: string;
   topicHint?: string;
 };
+
