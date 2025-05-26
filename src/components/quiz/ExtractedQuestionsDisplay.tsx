@@ -19,7 +19,7 @@ import { saveQuestionToBankAction, suggestMcqAnswerAction, suggestExplanationAct
 import { Separator } from '../ui/separator';
 import { MathText } from '../ui/MathText';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
-// import { useQuestionBank } from '@/contexts/QuestionBankContext'; // Removed as bank is now DB driven
+import { useAuth } from '@/contexts/AuthContext'; // Added useAuth
 
 // Re-define ExtractedQuestion type to include the client-side `id`
 type ExtractedQuestion = AIExtractedQuestion & { id: string }; // This id is client-generated during extraction
@@ -37,23 +37,23 @@ const questionTypeLabels: Record<ExtractedQuestion['questionType'], string> = {
 };
 
 type QuestionSaveStateType = {
-  [clientQuestionId: string]: { // Using client-generated ID as key
+  [clientQuestionId: string]: { 
     isLoading: boolean;
-    isSaved: boolean; // Indicates if this specific instance was successfully saved to DB
-    dbId?: string; // Stores the Firestore document ID after saving
+    isSaved: boolean; 
+    dbId?: string; 
     error?: string;
   }
 };
 
 type EditableQuestionData = Omit<ExtractedQuestion, 'id' | 'questionType' | 'userId' | 'createdAt'> & {
-  id?: string; // This will be the client-generated ID
+  id?: string; 
   questionType?: ExtractedQuestion['questionType'];
 };
 
 
 export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestionsDisplayProps) {
   const { toast } = useToast();
-  // const { addQuestionToBank } = useQuestionBank(); // Removed
+  const { user } = useAuth(); // Get authenticated user
 
   const [editableQuestions, setEditableQuestions] = useState<ExtractedQuestion[]>([]);
   const [saveStates, setSaveStates] = useState<QuestionSaveStateType>({});
@@ -77,9 +77,8 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     if (extractionResult && extractionResult.extractedQuestions) {
       setEditableQuestions(extractionResult.extractedQuestions);
       const initialSaveStates: QuestionSaveStateType = {};
-      // Initialize save states for newly extracted questions.
-      // "isSaved" here means "successfully saved in this session", not "exists in DB from a previous session"
       extractionResult.extractedQuestions.forEach(eq => {
+        // For now, we don't check against DB on load here, just local session state
         initialSaveStates[eq.id] = { isLoading: false, isSaved: false };
       });
       setSaveStates(initialSaveStates);
@@ -161,10 +160,13 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   }, [filteredQuestions, saveStates]);
 
   const triggerSaveProcess = useCallback(async (questionToSave: ExtractedQuestion): Promise<boolean> => {
-    setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: true, isSaved: false } }));
+    if (!user) {
+      toast({ title: "Authentication Error", description: "You must be logged in to save questions.", variant: "destructive" });
+      return false;
+    }
 
-    // Prepare data for saving, excluding client-side 'id' and fields added by DB
-    const { id: clientId, userId, createdAt, ...dataToSave } = questionToSave;
+    setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: true, isSaved: false } }));
+    const { id: clientId, userId: existingUserId, createdAt, ...dataToSave } = questionToSave;
 
     if (!isSavingAll) { 
       toast({
@@ -174,11 +176,9 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     }
 
     try {
-      // Pass data without client-side ID to the action
-      const result: SaveQuestionToBankOutput = await saveQuestionToBankAction(dataToSave);
+      const result: SaveQuestionToBankOutput = await saveQuestionToBankAction(dataToSave, user.uid);
       if (result.success && result.questionId) {
         setSaveStates(prev => ({ ...prev, [clientId]: { isLoading: false, isSaved: true, dbId: result.questionId } }));
-        // Client-side context addQuestionToBank is removed. Bank page will refetch.
         if (!isSavingAll) {
           toast({
             title: "Question Saved to Database",
@@ -209,7 +209,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       }
       return false;
     }
-  }, [toast, isSavingAll]);
+  }, [toast, isSavingAll, user]);
 
 
   const handleOpenEditDialog = (questionId: string) => {
@@ -225,9 +225,13 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       toast({ title: "Cannot Save", description: "Question text cannot be empty.", variant: "destructive" });
       return;
     }
+    if (!user) {
+      toast({ title: "Authentication Error", description: "You must be logged in to save questions.", variant: "destructive" });
+      return;
+    }
 
     const questionWithEdits: ExtractedQuestion = {
-      ...currentQuestionForEdit, // Includes client-side 'id'
+      ...currentQuestionForEdit, 
       questionText: editedData.questionText || currentQuestionForEdit.questionText,
       options: editedData.options || currentQuestionForEdit.options,
       answer: editedData.answer || currentQuestionForEdit.answer,
@@ -241,7 +245,6 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       questionType: editedData.questionType || currentQuestionForEdit.questionType,
     };
     
-    // Update the question in the local editableQuestions state
     setEditableQuestions(prev => prev.map(q => q.id === questionWithEdits.id ? questionWithEdits : q));
     setIsEditDialogOpen(false);
     
@@ -250,6 +253,10 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   };
 
   const handleSaveAllUnsaved = async () => {
+    if (!user) {
+      toast({ title: "Authentication Error", description: "You must be logged in to save questions.", variant: "destructive" });
+      return;
+    }
     if (unsavedFilteredQuestions.length === 0) {
       toast({
         title: "Nothing to Save",
@@ -267,7 +274,6 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     let successCount = 0;
     let failureCount = 0;
 
-    // Use the questions from editableQuestions that are also in unsavedFilteredQuestions
     const questionsToProcess = editableQuestions.filter(eq => 
         unsavedFilteredQuestions.some(ufq => ufq.id === eq.id)
     );
@@ -349,7 +355,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     const mcqsWithoutAnswers = filteredQuestions.filter(q =>
       q.questionType === 'mcq' &&
       (!q.answer || q.answer.trim() === '' || (q.options && !q.options.includes(q.answer))) &&
-      !saveStates[q.id]?.isSaved // Only suggest for unsaved questions to avoid re-processing
+      !saveStates[q.id]?.isSaved 
     );
 
     if (mcqsWithoutAnswers.length === 0) {
@@ -411,7 +417,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   const handleSuggestAllMissingExplanations = async () => {
     const questionsWithoutExplanations = filteredQuestions.filter(q =>
       (!q.explanation || q.explanation.trim() === '') &&
-      !saveStates[q.id]?.isSaved // Only suggest for unsaved questions
+      !saveStates[q.id]?.isSaved 
     );
 
     if (questionsWithoutExplanations.length === 0) {
@@ -852,3 +858,5 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     </div>
   );
 }
+
+    

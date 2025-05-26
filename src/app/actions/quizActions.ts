@@ -41,7 +41,7 @@ import type {
   ExtractQuestionsFromPdfInput,
   BankedQuestionFromDB
 } from "@/lib/types"; 
-import { db, auth, collection, addDoc, serverTimestamp, query, where, getDocs, doc, deleteDoc, Timestamp } from "@/lib/firebase"; // Firebase imports
+import { db, collection, addDoc, serverTimestamp, query, where, getDocs, doc, deleteDoc, Timestamp } from "@/lib/firebase"; // Firebase imports (auth removed as it's not reliably used here)
 
 export async function generateCustomQuizAction(input: GenerateCustomQuizInput): Promise<CustomQuizGenOutput> {
   try {
@@ -86,7 +86,6 @@ export async function extractQuestionsFromPdfAction(input: ExtractQuestionsFromP
       throw new Error('AI returned an invalid format for extracted questions.');
     }
 
-    // Client-side ID generation for UI keying during extraction phase
     const questionsWithClientIds: ExtractedQuestion[] = result.extractedQuestions.map((q, index) => ({
       ...q,
       id: `extracted-${Date.now()}-${index}`, 
@@ -101,17 +100,20 @@ export async function extractQuestionsFromPdfAction(input: ExtractQuestionsFromP
   }
 }
 
-export async function saveQuestionToBankAction(questionData: Omit<ExtractedQuestion, 'id' | 'userId' | 'createdAt'>): Promise<SaveQuestionToBankOutput> {
-  if (!auth.currentUser) {
-    throw new Error("User not authenticated. Cannot save question to bank.");
+export async function saveQuestionToBankAction(
+  questionData: Omit<ExtractedQuestion, 'id' | 'userId' | 'createdAt'>,
+  userId: string // userId passed from client
+): Promise<SaveQuestionToBankOutput> {
+  if (!userId) {
+    // This check is a fallback; client should always send a valid UID.
+    throw new Error("User ID not provided. Cannot save question to bank.");
   }
-  const userId = auth.currentUser.uid;
 
   try {
     const questionToSave = {
       ...questionData,
-      userId,
-      createdAt: serverTimestamp(), // Firestore server-side timestamp
+      userId, // Use the userId passed from the client
+      createdAt: serverTimestamp(), 
     };
     const docRef = await addDoc(collection(db, "questions"), questionToSave);
     console.log("Question saved to Firestore with ID:", docRef.id);
@@ -123,16 +125,20 @@ export async function saveQuestionToBankAction(questionData: Omit<ExtractedQuest
   } catch (error) {
     console.error("Error saving question to Firestore:", error);
     const errorMessage = error instanceof Error ? error.message : "An unknown error occurred saving to database.";
+    // Firestore rules will throw specific permission errors if userId doesn't match request.auth.uid
+    if (errorMessage.toLowerCase().includes('permission denied') || errorMessage.toLowerCase().includes('missing or insufficient permissions')) {
+        throw new Error(`Failed to save question due to permission issues. Ensure you are properly authenticated and allowed to write for this user ID.`);
+    }
     throw new Error(`Failed to save question to bank: ${errorMessage}`);
   }
 }
 
-export async function getBankedQuestionsForUserAction(): Promise<BankedQuestionFromDB[]> {
-  if (!auth.currentUser) {
-    console.warn("User not authenticated. Returning empty question bank.");
+export async function getBankedQuestionsForUserAction(userId: string): Promise<BankedQuestionFromDB[]> {
+   if (!userId) {
+    // This check is a fallback; client should always send a valid UID.
+    console.warn("User ID not provided to getBankedQuestionsForUserAction. Returning empty question bank.");
     return [];
   }
-  const userId = auth.currentUser.uid;
 
   try {
     const q = query(collection(db, "questions"), where("userId", "==", userId));
@@ -143,25 +149,26 @@ export async function getBankedQuestionsForUserAction(): Promise<BankedQuestionF
       questions.push({
         ...data,
         id: docSnap.id,
-        // Ensure createdAt is a serializable format (ISO string)
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : String(data.createdAt || new Date().toISOString()),
       } as BankedQuestionFromDB);
     });
-    // Sort by creation date, newest first
     questions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return questions;
   } catch (error) {
     console.error("Error fetching questions from Firestore:", error);
+    // Firestore rules will prevent access if userId doesn't match request.auth.uid
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
+    if (errorMessage.toLowerCase().includes('permission denied') || errorMessage.toLowerCase().includes('missing or insufficient permissions')) {
+        throw new Error(`Failed to fetch questions due to permission issues. Ensure you are properly authenticated and allowed to read for this user ID.`);
+    }
     throw new Error("Failed to fetch questions from bank.");
   }
 }
 
 export async function removeQuestionFromBankAction(questionDocId: string): Promise<{success: boolean, message: string}> {
-  if (!auth.currentUser) {
-    throw new Error("User not authenticated. Cannot remove question.");
-  }
-  // Firestore rules should be the primary way to ensure a user can only delete their own questions.
-  // For an additional layer, you could fetch the doc first and check userId, but that's an extra read.
+  // Firestore rules are the primary guard here:
+  // allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+  // So, no explicit userId check needed from auth.currentUser which can be unreliable here.
   try {
     await deleteDoc(doc(db, "questions", questionDocId));
     return {
@@ -170,6 +177,10 @@ export async function removeQuestionFromBankAction(questionDocId: string): Promi
     };
   } catch (error) {
     console.error("Error removing question from Firestore:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
+    if (errorMessage.toLowerCase().includes('permission denied') || errorMessage.toLowerCase().includes('missing or insufficient permissions')) {
+        throw new Error(`Failed to remove question due to permission issues. Ensure you are properly authenticated and allowed to delete this item.`);
+    }
     throw new Error("Failed to remove question from bank.");
   }
 }
@@ -197,3 +208,5 @@ export async function suggestExplanationAction(input: SuggestExplanationInput): 
     throw new Error(errorMessage);
   }
 }
+
+    

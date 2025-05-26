@@ -13,7 +13,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare, PlusCircle, MinusCircle, PlayCircle, Trash2, PackagePlus, Wand2, ArrowLeft, Loader2, Info, Eye, AlertTriangle, BookText } from 'lucide-react';
 import type { ExtractedQuestion, Quiz as QuizType, MCQ as MCQType, BankedQuestionFromDB } from '@/lib/types'; 
 import { MathText } from '@/components/ui/MathText';
-// import { useQuestionBank } from '@/contexts/QuestionBankContext'; // Removed
 import { getBankedQuestionsForUserAction, removeQuestionFromBankAction } from '@/app/actions/quizActions';
 import { useQuizAssembly } from '@/contexts/QuizAssemblyContext';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -21,6 +20,7 @@ import { QuizDisplay } from '@/components/quiz/QuizDisplay';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { useAuth } from '@/contexts/AuthContext'; // Added useAuth
 
 const questionTypeLabels: Record<ExtractedQuestion['questionType'], string> = {
   mcq: 'Multiple Choice',
@@ -51,6 +51,7 @@ interface CriteriaQuizFormState {
 export default function QuestionBankPage() {
   const [bankedQuestions, setBankedQuestions] = useState<BankedQuestionFromDB[]>([]);
   const [isLoadingBank, setIsLoadingBank] = useState(true);
+  const { user } = useAuth(); // Get authenticated user
 
   const { 
     addQuestionToAssembly, 
@@ -86,9 +87,15 @@ export default function QuestionBankPage() {
 
   useEffect(() => {
     async function fetchBank() {
+      if (!user) {
+        setIsLoadingBank(false); 
+        // Optionally, show a message or redirect if user is somehow not authenticated
+        // For now, just don't fetch if user is null.
+        return;
+      }
       setIsLoadingBank(true);
       try {
-        const questions = await getBankedQuestionsForUserAction();
+        const questions = await getBankedQuestionsForUserAction(user.uid);
         setBankedQuestions(questions);
       } catch (error) {
         toast({
@@ -102,7 +109,7 @@ export default function QuestionBankPage() {
       }
     }
     fetchBank();
-  }, [toast]);
+  }, [toast, user]); // Added user to dependency array
 
   const handleRemoveQuestion = async (questionDocId: string) => {
     const questionToRemove = bankedQuestions.find(q => q.id === questionDocId);
@@ -202,10 +209,10 @@ export default function QuestionBankPage() {
     
     const validQuizMcqs: MCQType[] = initialMatchingExtractedQuestions
       .map(eq => ({
-        id: eq.id, // This is now Firestore doc ID
+        id: eq.id,
         question: eq.questionText,
         options: eq.options ? [...eq.options] : [],
-        answer: typeof eq.answer === 'string' ? eq.answer.trim() : "",
+        answer: typeof eq.answer === 'string' ? eq.answer : "",
         explanation: eq.explanation || "No explanation provided.",
         type: 'mcq' as const, 
       }))
@@ -300,18 +307,19 @@ export default function QuestionBankPage() {
       return;
     }
     
-    let quizGeneratedMessage = `Generated a quiz with ${finalQuizQuestions.length} question(s) from ${numAvailableInPool} available valid MCQs.`;
+    let quizGeneratedMessage = `Generated a quiz with ${finalQuizQuestions.length} question(s) from ${numAvailableInPool} available valid MCQs for these criteria.`;
     if (finalQuizQuestions.length < criteriaForm.numQuestions && numAvailableInPool < criteriaForm.numQuestions && !poolCycledThisTurn) {
-      quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}) were available.`;
+      quizGeneratedMessage += ` Requested ${criteriaForm.numQuestions}, but only ${numAvailableInPool} were available.`;
     } else if (finalQuizQuestions.length < criteriaForm.numQuestions && poolCycledThisTurn) {
-       quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}). All available questions in this pool have been used and re-shuffled.`;
+       quizGeneratedMessage += ` Requested ${criteriaForm.numQuestions}. All available questions in this pool have been used and re-shuffled.`;
     } else if (finalQuizQuestions.length < criteriaForm.numQuestions && numToSelect < criteriaForm.numQuestions && numToSelect === numAvailableInPool) {
       quizGeneratedMessage += ` All ${numAvailableInPool} available question(s) for these criteria were selected.`;
     }
 
+
     if (poolCycledThisTurn) {
        toast({
-        title: "Question Pool Cycled & Re-shuffled",
+        title: "Quiz Generated & Pool Cycled!",
         description: quizGeneratedMessage,
         variant: "default",
         duration: 6000,
@@ -336,7 +344,7 @@ export default function QuestionBankPage() {
   };
 
   const handleStartAssembledQuiz = () => {
-    const assembled = getAssembledQuestions(); // These are ExtractedQuestion from context
+    const assembled = getAssembledQuestions(); 
     if (assembled.length === 0) {
       toast({
         title: "Assembly Empty",
@@ -348,7 +356,7 @@ export default function QuestionBankPage() {
 
     const mcqQuestionsForQuiz: MCQType[] = assembled
       .filter(eq => eq.questionType === 'mcq') 
-      .map(eq => ({ // eq is ExtractedQuestion from assembly (client ID or DB ID if saved)
+      .map(eq => ({ 
         id: eq.id, 
         question: eq.questionText,
         options: eq.options ? [...eq.options] : [], 
@@ -712,7 +720,7 @@ export default function QuestionBankPage() {
                                         variant="default" 
                                         size="sm" 
                                         className="ml-2 bg-primary hover:bg-primary/90"
-                                        onClick={() => addQuestionToAssembly(question)} // Pass the whole BankedQuestionFromDB
+                                        onClick={() => addQuestionToAssembly(question)} 
                                     >
                                         <PlusCircle className="mr-2 h-4 w-4" /> Add to New Quiz
                                     </Button>
@@ -861,3 +869,5 @@ export default function QuestionBankPage() {
     </TooltipProvider>
   );
 }
+
+    
