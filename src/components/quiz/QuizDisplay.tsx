@@ -111,6 +111,7 @@ export function QuizDisplay({ quiz, showAnswersInitially = false }: QuizDisplayP
           <HelpCircle className="text-primary"/> Question {currentQuestionIndex + 1} of {quiz.questions.length}
         </CardTitle>
         <Separator className="my-2"/>
+        {/* This is the corrected line to display the question text */}
         <MathText text={currentQuestion.question} className="text-lg font-semibold text-foreground/90" />
       </CardHeader>
       
