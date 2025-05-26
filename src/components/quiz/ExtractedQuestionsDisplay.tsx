@@ -10,10 +10,11 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BookText, CheckCircle, ChevronDown, ChevronUp, Image as ImageIcon, Info, ListOrdered, Save, Tag, Type, XCircle, Loader2, SigmaSquare, Filter, TagsIcon } from 'lucide-react';
+import { BookText, CheckCircle, ImageIcon, Info, ListOrdered, Save, Tag, Type, XCircle, Loader2, SigmaSquare, Filter, TagsIcon } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from '@/hooks/use-toast';
 import { saveQuestionToBankAction } from '@/app/actions/quizActions';
+import { Separator } from '../ui/separator';
 
 interface ExtractedQuestionsDisplayProps {
   extractionResult: ExtractQuestionsFromPdfOutput;
@@ -40,7 +41,9 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   const [saveStates, setSaveStates] = useState<QuestionSaveStateType>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [tagSearchTerm, setTagSearchTerm] = useState(''); // New state for tag filtering
+  const [tagSearchTerm, setTagSearchTerm] = useState('');
+  const [isSavingAll, setIsSavingAll] = useState(false);
+
 
   const uniqueCategories = useMemo(() => {
     if (!extractionResult || !extractionResult.extractedQuestions) return [];
@@ -73,6 +76,98 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     });
   }, [extractionResult, searchTerm, selectedCategory, tagSearchTerm]);
 
+  const unsavedFilteredQuestions = useMemo(() => {
+    return filteredQuestions.filter(q => !saveStates[q.id]?.isSaved);
+  }, [filteredQuestions, saveStates]);
+
+  const handleSaveToBank = useCallback(async (question: ExtractedQuestion): Promise<boolean> => {
+    setSaveStates(prev => ({ ...prev, [question.id]: { isLoading: true, isSaved: false } }));
+    // Minimal toast for individual save when part of batch, rely on summary toast.
+    // If not saving all, then a more descriptive toast is fine.
+    if (!isSavingAll) {
+      toast({
+        title: "Saving Question...",
+        description: `Attempting to save "${question.questionText.substring(0, 30)}..." to the bank.`,
+      });
+    }
+
+    try {
+      const result: SaveQuestionToBankOutput = await saveQuestionToBankAction(question);
+      if (result.success) {
+        setSaveStates(prev => ({ ...prev, [question.id]: { isLoading: false, isSaved: true } }));
+        if (!isSavingAll) {
+          toast({
+            title: "Question Saved (Simulated)",
+            description: result.message || `Question with ID ${result.questionId} saved.`,
+          });
+        }
+        return true;
+      } else {
+        setSaveStates(prev => ({ ...prev, [question.id]: { isLoading: false, isSaved: false, error: result.message } }));
+        if (!isSavingAll) {
+          toast({
+            variant: "destructive",
+            title: "Save Failed (Simulated)",
+            description: result.message,
+          });
+        }
+        return false;
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during save.";
+      setSaveStates(prev => ({ ...prev, [question.id]: { isLoading: false, isSaved: false, error: errorMessage } }));
+      if (!isSavingAll) {
+        toast({
+          variant: "destructive",
+          title: "Error Saving Question",
+          description: errorMessage,
+        });
+      }
+      return false;
+    }
+  }, [toast, isSavingAll]);
+
+
+  const handleSaveAll = async () => {
+    if (unsavedFilteredQuestions.length === 0) {
+        toast({
+            title: "Nothing to Save",
+            description: "All currently displayed questions are already saved or there are no questions to save.",
+        });
+        return;
+    }
+
+    setIsSavingAll(true);
+    toast({
+        title: "Batch Saving Started",
+        description: `Attempting to save ${unsavedFilteredQuestions.length} question(s)...`,
+    });
+
+    const results = await Promise.allSettled(
+        unsavedFilteredQuestions.map(q => handleSaveToBank(q))
+    );
+
+    let successCount = 0;
+    let failureCount = 0;
+    results.forEach(result => {
+        if (result.status === 'fulfilled' && result.value === true) {
+            successCount++;
+        } else {
+            failureCount++;
+            // Individual error toasts for failed saves are handled by handleSaveToBank
+        }
+    });
+
+    setIsSavingAll(false);
+    toast({
+        title: "Batch Save Complete",
+        description: `${successCount} question(s) saved. ${failureCount > 0 ? `${failureCount} failed.` : ''}`,
+        variant: failureCount > 0 && successCount === 0 ? "destructive" : "default",
+        duration: 5000,
+    });
+  };
+
+
   if (!extractionResult || extractionResult.extractedQuestions.length === 0) {
     return (
       <Alert>
@@ -85,39 +180,6 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     );
   }
   
-  const handleSaveToBank = async (question: ExtractedQuestion) => {
-    setSaveStates(prev => ({ ...prev, [question.id]: { isLoading: true, isSaved: false } }));
-    toast({
-      title: "Saving Question...",
-      description: `Attempting to save "${question.questionText.substring(0, 30)}..." to the bank.`,
-    });
-
-    try {
-      const result: SaveQuestionToBankOutput = await saveQuestionToBankAction(question);
-      if (result.success) {
-        setSaveStates(prev => ({ ...prev, [question.id]: { isLoading: false, isSaved: true } }));
-        toast({
-          title: "Question Saved (Simulated)",
-          description: result.message || `Question with ID ${result.questionId} saved.`,
-        });
-      } else {
-        setSaveStates(prev => ({ ...prev, [question.id]: { isLoading: false, isSaved: false, error: result.message } }));
-        toast({
-          variant: "destructive",
-          title: "Save Failed (Simulated)",
-          description: result.message,
-        });
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during save.";
-      setSaveStates(prev => ({ ...prev, [question.id]: { isLoading: false, isSaved: false, error: errorMessage } }));
-      toast({
-        variant: "destructive",
-        title: "Error Saving Question",
-        description: errorMessage,
-      });
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -168,6 +230,23 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
             />
             <p className="text-xs text-muted-foreground mt-1">Comma-separated. Shows questions matching ALL tags.</p>
           </div>
+        </div>
+        <Separator className="my-4" />
+        <div className="flex justify-end">
+            <Button
+                onClick={handleSaveAll}
+                disabled={isSavingAll || unsavedFilteredQuestions.length === 0}
+                variant="default"
+                size="sm"
+                className="bg-primary hover:bg-primary/90"
+            >
+                {isSavingAll ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                )}
+                {isSavingAll ? "Saving All..." : `Save All Unsaved (${unsavedFilteredQuestions.length})`}
+            </Button>
         </div>
       </Card>
 
@@ -233,22 +312,24 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                       <strong><ListOrdered className="inline h-4 w-4 mr-1" />Options:</strong>
                       <ul className="list-disc list-inside pl-4 space-y-1 mt-1">
                         {item.options.map((opt, optIndex) => (
-                          <li key={`${item.id}-opt-${optIndex}`} className={opt === item.answer ? 'text-green-600 font-medium' : ''}>
+                          <li key={`${item.id}-opt-${optIndex}`} 
+                              className={opt === item.answer ? 'text-green-600 dark:text-green-400 font-medium' : 'text-foreground/80'}>
                             {opt}
-                            {opt === item.answer && <CheckCircle className="inline h-4 w-4 ml-2 text-green-600" />}
+                            {opt === item.answer && <CheckCircle className="inline h-4 w-4 ml-2 text-green-600 dark:text-green-400" />}
                           </li>
                         ))}
                       </ul>
                     </div>
                   )}
 
-                  {item.answer && (
+                  {item.answer && item.questionType !== 'mcq' && ( // Only show non-MCQ answer if explicitly present
                     <Alert variant="default" className="mt-2 bg-green-500/10 border-green-500/30">
                        <CheckCircle className="inline h-4 w-4 mr-1 text-green-700 dark:text-green-500" />
-                       <AlertTitle className="font-semibold text-green-700 dark:text-green-500">Correct Answer</AlertTitle>
+                       <AlertTitle className="font-semibold text-green-700 dark:text-green-500">Answer</AlertTitle>
                        <AlertDescription className="text-green-700/90 dark:text-green-500/90">{item.answer}</AlertDescription>
                     </Alert>
                   )}
+                  
 
                   {item.explanation && (
                     <Alert className="bg-muted/40 mt-2">
