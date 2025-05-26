@@ -1,13 +1,16 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { ExtractQuestionsFromPdfOutput, ExtractedQuestion, SaveQuestionToBankOutput } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { BookText, CheckCircle, ChevronDown, ChevronUp, Image as ImageIcon, Info, ListOrdered, Save, Tag, Type, XCircle, Loader2, SigmaSquare } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { BookText, CheckCircle, ChevronDown, ChevronUp, Image as ImageIcon, Info, ListOrdered, Save, Tag, Type, XCircle, Loader2, SigmaSquare, Filter } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from '@/hooks/use-toast';
 import { saveQuestionToBankAction } from '@/app/actions/quizActions';
@@ -35,6 +38,25 @@ type QuestionSaveStateType = {
 export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestionsDisplayProps) {
   const { toast } = useToast();
   const [saveStates, setSaveStates] = useState<QuestionSaveStateType>({});
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+
+  const uniqueCategories = useMemo(() => {
+    if (!extractionResult || !extractionResult.extractedQuestions) return [];
+    const categories = new Set(extractionResult.extractedQuestions.map(q => q.suggestedCategory));
+    return Array.from(categories).sort();
+  }, [extractionResult]);
+
+  const filteredQuestions = useMemo(() => {
+    if (!extractionResult || !extractionResult.extractedQuestions) return [];
+    return extractionResult.extractedQuestions.filter(question => {
+      const matchesSearchTerm = searchTerm === '' || 
+        question.questionText.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = selectedCategory === '' || selectedCategory === 'all' || 
+        question.suggestedCategory === selectedCategory;
+      return matchesSearchTerm && matchesCategory;
+    });
+  }, [extractionResult, searchTerm, selectedCategory]);
 
   if (!extractionResult || extractionResult.extractedQuestions.length === 0) {
     return (
@@ -61,10 +83,9 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
         setSaveStates(prev => ({ ...prev, [question.id]: { isLoading: false, isSaved: true } }));
         toast({
           title: "Question Saved (Simulated)",
-          description: result.message,
+          description: result.message || `Question with ID ${result.questionId} saved.`,
         });
       } else {
-        // This case might not be hit if action throws error directly
         setSaveStates(prev => ({ ...prev, [question.id]: { isLoading: false, isSaved: false, error: result.message } }));
         toast({
           variant: "destructive",
@@ -83,11 +104,56 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     }
   };
 
-
   return (
     <div className="space-y-6">
+      <Card className="p-4 sm:p-6 bg-muted/30 border shadow-inner">
+        <div className="flex flex-col sm:flex-row gap-4 items-end">
+          <div className="flex-grow w-full sm:w-auto">
+            <Label htmlFor="search-questions" className="flex items-center mb-1 text-sm font-medium">
+              <Filter className="h-4 w-4 mr-2 text-primary"/>Search Questions
+            </Label>
+            <Input
+              id="search-questions"
+              type="text"
+              placeholder="Type to search by question text..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="bg-background"
+            />
+          </div>
+          <div className="w-full sm:w-auto sm:min-w-[200px]">
+            <Label htmlFor="category-filter" className="flex items-center mb-1 text-sm font-medium">
+              <Type className="h-4 w-4 mr-2 text-primary"/>Filter by Category
+            </Label>
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger id="category-filter" className="w-full bg-background">
+                <SelectValue placeholder="All Categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {uniqueCategories.map(category => (
+                  <SelectItem key={category} value={category}>
+                    {category}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </Card>
+
+      {filteredQuestions.length === 0 && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertTitle>No Matching Questions</AlertTitle>
+          <AlertDescription>
+            No extracted questions match your current search term or category filter. Try adjusting your filters.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Accordion type="multiple" className="w-full">
-        {extractionResult.extractedQuestions.map((item, index) => {
+        {filteredQuestions.map((item, index) => {
           const currentSaveState = saveStates[item.id] || { isLoading: false, isSaved: false };
           return (
             <AccordionItem value={item.id} key={item.id}>
