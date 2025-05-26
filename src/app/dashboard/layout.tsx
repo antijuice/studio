@@ -18,10 +18,10 @@ import {
   BotMessageSquare,
   History,
   Library,
-  LogOut, // Added LogOut icon
+  LogOut,
   Loader2,
-  Sparkles, // Icon for Extract Questions
-  LibraryBig, // Icon for Question Bank
+  Sparkles, 
+  LibraryBig, 
 } from 'lucide-react';
 import {
   SidebarProvider,
@@ -42,7 +42,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import React, { useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
+import { useAuth } from '@/contexts/AuthContext';
 
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
@@ -63,11 +63,9 @@ const navItems = [
   { href: '/dashboard/leaderboard', label: 'Leaderboard', icon: Trophy },
 ];
 
-// Updated bottomNavItems to include Sign Out functionality via AuthContext
 const bottomNavItems = (handleSignOut: () => void) => [
   { href: '/dashboard/profile', label: 'Profile', icon: UserCircle },
-  // { href: '/dashboard/settings', label: 'Settings', icon: Settings },
-  { isButton: true, label: 'Sign Out', icon: LogOut, action: handleSignOut }, // Sign Out button
+  { isButton: true, label: 'Sign Out', icon: LogOut, action: handleSignOut },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -98,28 +96,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 }
 
 function SidebarDecorated({ children }: { children: React.ReactNode }) {
-  const { open, toggleSidebar } = useSidebar()
+  const { open } = useSidebar(); // 'toggleSidebar' is called by SidebarTrigger itself
   const pathname = usePathname();
-  const { user, signOut } = useAuth(); // Get user and signOut from AuthContext
+  const { user, signOut } = useAuth();
 
   const handleSignOut = async () => {
     await signOut();
-    // Router push to /login is handled within signOut itself
   };
 
   return (
     <>
+      {/* Mobile-only top bar */}
+      <div className="md:hidden p-2 border-b border-border bg-background sticky top-0 z-30 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+           <SidebarTrigger className="h-9 w-9" /> {/* Trigger for mobile */}
+           <BotMessageSquare className="w-7 h-7 text-primary" />
+           <h1 className="text-lg font-semibold text-primary">QuelprQuiz</h1>
+        </div>
+        <Link href="/dashboard/profile">
+            <Avatar className="h-8 w-8 cursor-pointer">
+                <AvatarImage src={user?.photoURL || "https://placehold.co/40x40.png"} alt="User Avatar" data-ai-hint="user avatar" />
+                <AvatarFallback>
+                  {user?.displayName ? user.displayName.substring(0, 1).toUpperCase() : user?.email ? user.email.substring(0,1).toUpperCase() : 'U'}
+                </AvatarFallback>
+            </Avatar>
+        </Link>
+      </div>
+
+      {/* Sidebar component that becomes Sheet on mobile */}
       <Sidebar collapsible="icon" variant="sidebar">
         <SidebarHeader className="p-4">
           <div className="flex items-center gap-3">
-            {/* 
-              The SidebarTrigger component already renders a Button.
-              It defaults to variant="ghost" and size="icon", and handles toggleSidebar.
-              The className "md:hidden" preserves the mobile-only visibility.
-              "h-10 w-10" is added to maintain the size implied by the original outer Button's size="icon",
-              overriding SidebarTrigger's internal h-7 w-7 default styling.
-            */}
-            <SidebarTrigger className="md:hidden h-10 w-10" />
+            {/* The SidebarTrigger was here, removed as it's now in the mobile top bar */}
             <BotMessageSquare className="w-8 h-8 text-primary" />
             <h1 className={`text-xl font-semibold text-primary transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0 md:opacity-0 group-data-[collapsible=icon]:hidden'}`}>
               QuelprQuiz
@@ -171,7 +179,7 @@ function SidebarDecorated({ children }: { children: React.ReactNode }) {
         <Separator className="my-2 bg-sidebar-border" />
         <SidebarFooter>
           <SidebarMenu>
-            {bottomNavItems(handleSignOut).map((item: any) => ( // Added type any for item
+            {bottomNavItems(handleSignOut).map((item: any) => (
               <SidebarMenuItem key={item.label}>
                 {item.isButton ? (
                   <SidebarMenuButton
@@ -211,7 +219,9 @@ function SidebarDecorated({ children }: { children: React.ReactNode }) {
           </div>
         </SidebarFooter>
       </Sidebar>
-      {children}
+      
+      {/* Main page content */}
+      {children} 
     </>
   );
 }
