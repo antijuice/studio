@@ -155,7 +155,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
 
                   {item.explanation && (
                     <Alert className="bg-muted/40">
-                      <Info className="h-4 w-4" />
+                      <Info className="inline h-4 w-4 mr-1" />
                       <AlertTitle className="font-semibold">Explanation</AlertTitle>
                       <AlertDescription>{item.explanation}</AlertDescription>
                     </Alert>
