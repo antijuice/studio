@@ -1,0 +1,22 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users can only read/write their own profile information
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Questions:
+    // - Authenticated users can create questions for themselves.
+    // - Users can only read, update, or delete their own questions.
+    match /questions/{questionId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    // Add rules for other collections as needed
+  }
+}
