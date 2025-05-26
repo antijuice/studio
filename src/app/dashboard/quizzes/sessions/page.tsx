@@ -1,9 +1,13 @@
+
+"use client";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { History, ListChecks, PieChart, Search } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import React from "react"; // Import React for useState if needed in future
 
 // Mock data for past sessions
 const mockSessions = [
@@ -15,6 +19,13 @@ const mockSessions = [
 
 
 export default function PastSessionsPage() {
+  const [searchTerm, setSearchTerm] = React.useState(""); // Example client-side state
+
+  const filteredSessions = mockSessions.filter(session => 
+    session.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    session.subject.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8">
       <header className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -23,14 +34,19 @@ export default function PastSessionsPage() {
           <p className="text-muted-foreground">Review your performance and learn from previous quizzes.</p>
         </div>
         <div className="relative w-full md:w-auto">
-            <Input placeholder="Search sessions..." className="pl-10" />
+            <Input 
+              placeholder="Search sessions by title or subject..." 
+              className="pl-10" 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         </div>
       </header>
 
-      {mockSessions.length > 0 ? (
+      {filteredSessions.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {mockSessions.map((session) => (
+          {filteredSessions.map((session) => (
             <Card key={session.id} className="shadow-lg hover:shadow-xl transition-shadow flex flex-col">
               <CardHeader>
                 <div className="flex justify-between items-start">
@@ -67,9 +83,9 @@ export default function PastSessionsPage() {
         <Card>
           <CardContent className="p-10 text-center">
             <History className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">No Past Sessions Yet</h2>
+            <h2 className="text-xl font-semibold mb-2">No Past Sessions Found</h2>
             <p className="text-muted-foreground mb-4">
-              Complete some quizzes to see your history and track your progress over time.
+              No sessions match your search, or you haven't completed any quizzes yet.
             </p>
             <Button asChild>
               <Link href="/dashboard/quizzes/custom">Start a New Quiz</Link>
