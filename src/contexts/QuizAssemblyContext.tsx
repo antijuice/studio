@@ -22,29 +22,28 @@ export function QuizAssemblyProvider({ children }: { children: React.ReactNode }
   const { toast } = useToast();
 
   const addQuestionToAssembly = useCallback((question: ExtractedQuestion) => {
-    setAssembledQuestions((prevQuestions) => {
-      if (prevQuestions.some(aq => aq.id === question.id)) {
-        toast({ title: "Already Added", description: "This question is already in your quiz assembly.", variant: "default" });
-        return prevQuestions;
-      }
-      if (question.questionType !== 'mcq') {
-        toast({ title: "Unsupported Type", description: "Only MCQ questions can be added to the assembly at this time.", variant: "default" });
-        return prevQuestions;
-      }
-      toast({ title: "Question Added", description: `"${question.questionText.substring(0,30)}..." added to assembly.` });
-      return [...prevQuestions, question];
-    });
-  }, [toast]);
+    if (assembledQuestions.some(aq => aq.id === question.id)) {
+      toast({ title: "Already Added", description: "This question is already in your quiz assembly.", variant: "default" });
+      return;
+    }
+    if (question.questionType !== 'mcq') {
+      toast({ title: "Unsupported Type", description: "Only MCQ questions can be added to the assembly at this time.", variant: "default" });
+      return;
+    }
+
+    setAssembledQuestions(prevQuestions => [...prevQuestions, question]);
+    toast({ title: "Question Added", description: `"${question.questionText.substring(0,30)}..." added to assembly.` });
+  }, [assembledQuestions, toast]);
 
   const removeQuestionFromAssembly = useCallback((questionId: string) => {
-    setAssembledQuestions((prevQuestions) => {
-      const questionToRemove = prevQuestions.find(q => q.id === questionId);
-      if (questionToRemove) {
-        toast({ title: "Question Removed", description: `"${questionToRemove.questionText.substring(0,30)}..." removed from assembly.` });
-      }
-      return prevQuestions.filter(q => q.id !== questionId);
-    });
-  }, [toast]);
+    const questionToRemove = assembledQuestions.find(q => q.id === questionId);
+    
+    setAssembledQuestions(prevQuestions => prevQuestions.filter(q => q.id !== questionId));
+
+    if (questionToRemove) {
+      toast({ title: "Question Removed", description: `"${questionToRemove.questionText.substring(0,30)}..." removed from assembly.` });
+    }
+  }, [assembledQuestions, toast]);
 
   const isQuestionInAssembly = useCallback((questionId: string) => {
     return assembledQuestions.some(q => q.id === questionId);
@@ -59,9 +58,14 @@ export function QuizAssemblyProvider({ children }: { children: React.ReactNode }
   }, [assembledQuestions]);
   
   const clearAssembly = useCallback(() => {
-    setAssembledQuestions([]);
-    toast({ title: "Assembly Cleared", description: "All selected questions have been removed from the assembly." });
-  }, [toast]);
+    if (assembledQuestions.length > 0) {
+        setAssembledQuestions([]);
+        toast({ title: "Assembly Cleared", description: "All selected questions have been removed from the assembly." });
+    } else {
+        // Optionally, you could add a toast here if the assembly is already empty
+        // toast({ title: "Assembly Empty", description: "The assembly is already empty." });
+    }
+  }, [assembledQuestions, toast]);
 
   return (
     <QuizAssemblyContext.Provider value={{ 
