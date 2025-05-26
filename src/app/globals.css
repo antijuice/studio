@@ -8,33 +8,33 @@ body {
 
 @layer base {
   :root {
-    --background: 180 25.5% 24.7%; /* Dark Slate Gray */
-    --foreground: 180 10% 90%; /* Light text for dark background */
+    --background: 220 10% 20%; /* Neutral Dark Grey */
+    --foreground: 220 10% 90%; /* Light text for dark background */
 
-    --card: 180 25% 20%; /* Slightly darker than background */
-    --card-foreground: 180 10% 90%;
+    --card: 220 10% 17%; /* Slightly darker than background */
+    --card-foreground: 220 10% 90%;
 
-    --popover: 180 25% 18%; /* Even darker for popovers */
-    --popover-foreground: 180 10% 90%;
+    --popover: 220 10% 15%; /* Even darker for popovers */
+    --popover-foreground: 220 10% 90%;
 
-    --primary: 271 100% 25.3%; /* Deep Indigo */
-    --primary-foreground: 271 80% 90%; /* Lighter contrast for primary */
+    --primary: 271 100% 25.3%; /* Deep Indigo (Unchanged) */
+    --primary-foreground: 271 80% 90%; /* Lighter contrast for primary (Unchanged) */
 
-    --secondary: 271 50% 35%; /* A less intense version of primary or related color */
-    --secondary-foreground: 271 50% 90%;
+    --secondary: 271 50% 35%; /* A less intense version of primary or related color (Unchanged) */
+    --secondary-foreground: 271 50% 90%; /* (Unchanged) */
 
-    --muted: 180 15% 35%; /* Muted version of background */
-    --muted-foreground: 180 10% 70%; /* Dimmer text for muted */
+    --muted: 220 8% 30%; /* Muted version of background */
+    --muted-foreground: 220 8% 70%; /* Dimmer text for muted */
 
-    --accent: 274 100% 50%; /* Electric Violet */
-    --accent-foreground: 274 80% 95%; /* High contrast for accent elements */
+    --accent: 274 100% 50%; /* Electric Violet (Unchanged) */
+    --accent-foreground: 274 80% 95%; /* High contrast for accent elements (Unchanged) */
 
-    --destructive: 0 70% 50%; /* Standard red for destructive actions */
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 70% 50%; /* Standard red for destructive actions (Unchanged) */
+    --destructive-foreground: 0 0% 98%; /* (Unchanged) */
 
-    --border: 180 20% 30%; /* Borders slightly lighter than background elements */
-    --input: 180 20% 30%; /* Input fields similar to borders */
-    --ring: 274 100% 60%; /* Ring color related to accent */
+    --border: 220 10% 25%; /* Borders slightly lighter than background elements */
+    --input: 220 10% 25%; /* Input fields similar to borders */
+    --ring: 274 100% 60%; /* Ring color related to accent (Unchanged) */
 
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
@@ -44,15 +44,15 @@ body {
     
     --radius: 0.5rem;
 
-    /* Sidebar specific colors, aligning with dark theme */
-    --sidebar-background: 180 25% 22%; /* Slightly different shade of dark slate gray */
-    --sidebar-foreground: 180 10% 85%;
-    --sidebar-primary: 274 100% 50%; /* Accent for active items (Electric Violet) */
-    --sidebar-primary-foreground: 274 80% 95%;
-    --sidebar-accent: 180 20% 28%; /* Hover/selected non-active items */
-    --sidebar-accent-foreground: 180 10% 90%;
-    --sidebar-border: 180 20% 30%;
-    --sidebar-ring: 274 100% 60%; /* Electric Violet for ring */
+    /* Sidebar specific colors, aligning with new dark theme */
+    --sidebar-background: 220 10% 18%; /* Neutral Dark Grey for sidebar */
+    --sidebar-foreground: 220 10% 85%;
+    --sidebar-primary: 274 100% 50%; /* Accent for active items (Electric Violet - Unchanged) */
+    --sidebar-primary-foreground: 274 80% 95%; /* (Unchanged) */
+    --sidebar-accent: 220 10% 23%; /* Hover/selected non-active items */
+    --sidebar-accent-foreground: 220 10% 90%;
+    --sidebar-border: 220 10% 25%;
+    --sidebar-ring: 274 100% 60%; /* Electric Violet for ring (Unchanged) */
   }
 
   /* Removed .dark specific block as dark theme is default */
