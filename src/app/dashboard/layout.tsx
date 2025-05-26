@@ -37,13 +37,14 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
   useSidebar,
-  SidebarTitle, // Ensure SheetTitle (as SidebarTitle) is imported if used
+  SidebarTitle,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import React, { useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { QuestionBankProvider } from '@/contexts/QuestionBankContext'; // Added import
 
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
@@ -88,12 +89,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
   
   return (
-    <SidebarProvider defaultOpen>
-      <SidebarDecorated>
-        {/* Ensure SidebarInset and its children handle overflow properly */}
-        <SidebarInset className="overflow-x-hidden">{children}</SidebarInset>
-      </SidebarDecorated>
-    </SidebarProvider>
+    <QuestionBankProvider> {/* Added Provider */}
+      <SidebarProvider defaultOpen>
+        <SidebarDecorated>
+          <SidebarInset className="overflow-x-hidden">{children}</SidebarInset>
+        </SidebarDecorated>
+      </SidebarProvider>
+    </QuestionBankProvider>
   );
 }
 
@@ -220,7 +222,6 @@ function SidebarDecorated({ children }: { children: React.ReactNode }) {
         </SidebarFooter>
       </Sidebar>
       
-      {/* Main page content */}
       {children} 
     </>
   );

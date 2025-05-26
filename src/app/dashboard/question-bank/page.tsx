@@ -10,59 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare } from 'lucide-react';
 import type { ExtractedQuestion } from '@/lib/types'; 
 import { MathText } from '@/components/ui/MathText';
+import { useQuestionBank } from '@/contexts/QuestionBankContext'; // Added import
 
-const mockBankQuestions: ExtractedQuestion[] = [
-  {
-    id: 'bank-q1',
-    questionText: 'What is the powerhouse of the cell? This involves $E=mc^2$.',
-    questionType: 'mcq',
-    options: ['Nucleus', 'Mitochondria', 'Ribosome', 'Endoplasmic Reticulum'],
-    answer: 'Mitochondria',
-    explanation: 'Mitochondria are responsible for generating most of the cell\'s supply of adenosine triphosphate (ATP), used as a source of chemical energy. Equation: $$ATP \\rightarrow ADP + P_i$$',
-    suggestedTags: ['biology', 'cell biology', 'organelles'],
-    suggestedCategory: 'Biology',
-    marks: 2,
-  },
-  {
-    id: 'bank-q2',
-    questionText: 'Explain the process of photosynthesis in brief, including the formula $6CO_2 + 6H_2O \\rightarrow C_6H_{12}O_6 + 6O_2$.',
-    questionType: 'short_answer',
-    answer: 'Photosynthesis is the process used by plants, algae, and certain bacteria to harness energy from sunlight and turn it into chemical energy.',
-    explanation: 'Key stages include light-dependent reactions (capturing light energy) and light-independent reactions (Calvin cycle - fixing carbon dioxide). The overall equation is $$6\\text{CO}_2 + 6\\text{H}_2\\text{O} + \\text{Light Energy} \\rightarrow \\text{C}_6\\text{H}_{12}\\text{O}_6 + 6\\text{O}_2$$.',
-    suggestedTags: ['biology', 'plants', 'photosynthesis', 'energy'],
-    suggestedCategory: 'Biology',
-    marks: 5,
-  },
-  {
-    id: 'bank-q3',
-    questionText: 'True or False: The Earth is flat.',
-    questionType: 'true_false',
-    answer: 'False',
-    explanation: 'Scientific evidence overwhelmingly supports that the Earth is an oblate spheroid.',
-    suggestedTags: ['geography', 'science', 'earth'],
-    suggestedCategory: 'General Science',
-  },
-  {
-    id: 'bank-q4',
-    questionText: 'Solve for $x$: $2x + 5 = 15$',
-    questionType: 'mcq', 
-    options: ['$x = 3$', '$x = 5$', '$x = 7$', '$x = 10$'],
-    answer: '$x = 5$',
-    explanation: 'Subtract $5$ from both sides: $2x = 10$. Divide by $2$: $x = 5$.',
-    suggestedTags: ['mathematics', 'algebra', 'equations'],
-    suggestedCategory: 'Mathematics',
-    marks: 3,
-  },
-  {
-    id: 'bank-q5',
-    questionText: 'Define "fill_in_the_blank" question type.',
-    questionType: 'fill_in_the_blank',
-    answer: 'A question type where the user needs to supply missing words in a sentence or phrase.',
-    explanation: 'These are useful for testing recall of specific terms or concepts.',
-    suggestedTags: ['pedagogy', 'assessment', 'question types'],
-    suggestedCategory: 'Education',
-  },
-];
+// Mock data is now removed as we'll use the context
+// const mockBankQuestions: ExtractedQuestion[] = [ ... ];
 
 const questionTypeLabels: Record<ExtractedQuestion['questionType'], string> = {
   mcq: 'Multiple Choice',
@@ -83,21 +34,22 @@ const QuestionTypeIcon = ({ type }: { type: ExtractedQuestion['questionType'] })
 const ALL_FILTER_VALUE = "__ALL__";
 
 export default function QuestionBankPage() {
+  const { bankedQuestions } = useQuestionBank(); // Use context
   const [searchTerm, setSearchTerm] = React.useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = React.useState(ALL_FILTER_VALUE);
   const [selectedTypeFilter, setSelectedTypeFilter] = React.useState(ALL_FILTER_VALUE);
 
   const uniqueCategories = React.useMemo(() => 
-    Array.from(new Set(mockBankQuestions.map(q => q.suggestedCategory))).sort(), 
-    []
+    Array.from(new Set(bankedQuestions.map(q => q.suggestedCategory))).sort(), 
+    [bankedQuestions]
   );
   const uniqueTypes = React.useMemo(() => 
-    Array.from(new Set(mockBankQuestions.map(q => q.questionType))).sort(),
-    []
+    Array.from(new Set(bankedQuestions.map(q => q.questionType))).sort(),
+    [bankedQuestions]
   );
 
   const filteredQuestions = React.useMemo(() => {
-    return mockBankQuestions.filter(q => {
+    return bankedQuestions.filter(q => {
       const matchesSearch = searchTerm === '' || 
         q.questionText.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (q.explanation && q.explanation.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -110,7 +62,7 @@ export default function QuestionBankPage() {
         
       return matchesSearch && matchesCategory && matchesType;
     });
-  }, [searchTerm, selectedCategoryFilter, selectedTypeFilter]);
+  }, [bankedQuestions, searchTerm, selectedCategoryFilter, selectedTypeFilter]);
   
 
   return (
@@ -120,7 +72,7 @@ export default function QuestionBankPage() {
           <LibraryBig className="h-10 w-10 text-primary" />
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Question Bank</h1>
-            <p className="text-muted-foreground">Browse, search, and manage the collective knowledge base.</p>
+            <p className="text-muted-foreground">Browse, search, and manage your saved questions.</p>
           </div>
         </div>
       </header>
@@ -159,7 +111,15 @@ export default function QuestionBankPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {filteredQuestions.length > 0 ? (
+          {bankedQuestions.length === 0 && searchTerm === '' && selectedCategoryFilter === ALL_FILTER_VALUE && selectedTypeFilter === ALL_FILTER_VALUE ? (
+             <div className="text-center py-10">
+              <LibraryBig className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+              <p className="text-xl font-medium text-muted-foreground">Your Question Bank is Empty</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Go to "Extract Questions" to add questions from your PDFs.
+              </p>
+            </div>
+          ) : filteredQuestions.length > 0 ? (
             <div className="space-y-4">
               {filteredQuestions.map((question) => (
                 <Card key={question.id} className="shadow-md hover:shadow-lg transition-shadow bg-card">
@@ -182,7 +142,7 @@ export default function QuestionBankPage() {
                       Category: <Badge variant="outline" className="text-xs font-normal">{question.suggestedCategory}</Badge>
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="pl-6 space-y-3"> {/* Added pl-6 for alignment with header icon */}
+                  <CardContent className="pl-6 space-y-3">
                     {question.questionType === 'mcq' && question.options && (
                         <div className="text-sm space-y-1 mb-2">
                             <p className="font-medium text-xs text-muted-foreground mb-1">Options:</p>
@@ -219,34 +179,31 @@ export default function QuestionBankPage() {
             </div>
           ) : (
             <div className="text-center py-10">
-              <LibraryBig className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+              <Search className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
               <p className="text-muted-foreground">No questions found matching your criteria.</p>
-              <p className="text-xs text-muted-foreground mt-1">Try adjusting your filters or adding more questions to the bank.</p>
+              <p className="text-xs text-muted-foreground mt-1">Try adjusting your filters.</p>
             </div>
           )}
         </CardContent>
       </Card>
        <Card className="mt-8 shadow-sm border-dashed">
             <CardHeader>
-                <CardTitle className="text-xl">Feature Under Development</CardTitle>
-                <CardDescription>This Question Bank currently uses mock data for demonstration.</CardDescription>
+                <CardTitle className="text-xl">Note on Data Persistence</CardTitle>
+                <CardDescription>Questions added to this bank are stored in your browser's memory for this session only.</CardDescription>
             </CardHeader>
             <CardContent>
                 <p className="text-muted-foreground">
+                    Refreshing the page or closing your browser will clear the banked questions.
                     Future updates will enable:
                 </p>
                 <ul className="list-disc list-inside text-muted-foreground mt-2 space-y-1 text-sm">
-                    <li>Displaying questions actually saved from the "Extract Questions from PDF" feature.</li>
+                    <li>Persistent storage of questions in a database.</li>
                     <li>Manually adding and editing questions directly in the bank.</li>
                     <li>Verification workflows for quality assurance.</li>
                     <li>Using banked questions to generate new custom quizzes.</li>
-                    <li>Advanced search and organization capabilities.</li>
                 </ul>
             </CardContent>
         </Card>
     </div>
   );
 }
-
-
-    

@@ -19,6 +19,7 @@ import { saveQuestionToBankAction } from '@/app/actions/quizActions';
 import { Separator } from '../ui/separator';
 import { MathText } from '../ui/MathText';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
+import { useQuestionBank } from '@/contexts/QuestionBankContext'; // Added import
 
 interface ExtractedQuestionsDisplayProps {
   extractionResult: ExtractQuestionsFromPdfOutput;
@@ -40,18 +41,18 @@ type QuestionSaveStateType = {
   }
 };
 
-// Define a type for the data being edited in the dialog
 type EditableQuestionData = Omit<ExtractedQuestion, 'id' | 'questionType'> & {
-  id?: string; // id might not be there if we were creating a new one
-  questionType?: ExtractedQuestion['questionType']; // also might not be there
+  id?: string; 
+  questionType?: ExtractedQuestion['questionType']; 
 };
 
 
 export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestionsDisplayProps) {
   const { toast } = useToast();
+  const { addQuestionToBank } = useQuestionBank(); // Use context
   const [saveStates, setSaveStates] = useState<QuestionSaveStateType>({});
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all'); // Renamed to avoid conflict
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
   const [tagSearchTerm, setTagSearchTerm] = useState('');
   const [isSavingAll, setIsSavingAll] = useState(false);
 
@@ -121,7 +122,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
 
   const triggerSaveProcess = useCallback(async (questionToSave: ExtractedQuestion): Promise<boolean> => {
     setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: true, isSaved: false } }));
-    if (!isSavingAll) {
+    if (!isSavingAll) { // Don't show individual toast if part of "Save All"
       toast({
         title: "Saving Question...",
         description: `Attempting to save question to the bank.`,
@@ -132,6 +133,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       const result: SaveQuestionToBankOutput = await saveQuestionToBankAction(questionToSave);
       if (result.success) {
         setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: false, isSaved: true } }));
+        addQuestionToBank(questionToSave); // Add to context on successful save
         if (!isSavingAll) {
           toast({
             title: "Question Saved",
@@ -162,7 +164,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       }
       return false;
     }
-  }, [toast, isSavingAll]);
+  }, [toast, addQuestionToBank, isSavingAll]);
 
   const handleOpenEditDialog = (question: ExtractedQuestion) => {
     setCurrentQuestionForEdit(question);
@@ -170,12 +172,11 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   };
 
   const handleConfirmSaveFromDialog = async () => {
-    if (!currentQuestionForEdit || !editedData.questionText) { // Add basic validation
+    if (!currentQuestionForEdit || !editedData.questionText) { 
       toast({ title: "Cannot Save", description: "Question text cannot be empty.", variant: "destructive" });
       return;
     }
     
-    // Construct the question object to save, merging original with edits
     const questionToSave: ExtractedQuestion = {
       ...currentQuestionForEdit,
       questionText: editedData.questionText || currentQuestionForEdit.questionText,
@@ -190,9 +191,9 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       relevantImageDescription: editedData.relevantImageDescription || currentQuestionForEdit.relevantImageDescription,
     };
 
-    setIsEditDialogOpen(false); // Close dialog before triggering save
+    setIsEditDialogOpen(false); 
     await triggerSaveProcess(questionToSave);
-    setCurrentQuestionForEdit(null); // Reset
+    setCurrentQuestionForEdit(null); 
   };
 
   const handleSaveAll = async () => {
@@ -213,19 +214,23 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     let successCount = 0;
     let failureCount = 0;
     
-    for (const q of unsavedFilteredQuestions) {
-        const result = await triggerSaveProcess(q); // Call the save function directly
-        if (result) {
-            successCount++;
-        } else {
-            failureCount++;
-        }
-    }
+    // Using Promise.allSettled to process all saves and then tally results
+    const results = await Promise.allSettled(
+      unsavedFilteredQuestions.map(q => triggerSaveProcess(q))
+    );
+
+    results.forEach(result => {
+      if (result.status === 'fulfilled' && result.value === true) {
+        successCount++;
+      } else {
+        failureCount++;
+      }
+    });
 
     setIsSavingAll(false);
     toast({
         title: "Batch Save Complete",
-        description: `${successCount} question(s) saved. ${failureCount > 0 ? `${failureCount} failed.` : ''}`,
+        description: `${successCount} question(s) saved to bank. ${failureCount > 0 ? `${failureCount} failed.` : ''}`,
         variant: failureCount > 0 && successCount === 0 ? "destructive" : failureCount > 0 ? "default" : "default",
         duration: 5000,
     });
@@ -330,9 +335,9 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
             <AccordionItem value={item.id} key={item.id}>
               <AccordionTrigger className="hover:no-underline text-left">
                 <div className="flex flex-col md:flex-row md:items-start justify-between w-full pr-2">
-                  <span className="font-semibold flex-1 mr-2 min-w-0">
+                   <div className="font-semibold flex-1 mr-2 min-w-0">
                      <MathText text={`Q${index + 1}: ${item.questionText}`} className="text-base" />
-                  </span>
+                  </div>
                   <div className="flex items-center gap-2 mt-1 md:mt-0 flex-shrink-0 flex-wrap">
                     {item.marks !== undefined && <Badge variant="outline" className="flex items-center gap-1"><SigmaSquare className="h-3 w-3"/> {item.marks}</Badge>}
                     <Badge variant="outline">{questionTypeLabels[item.questionType]}</Badge>
@@ -377,7 +382,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                       <ul className="list-none pl-4 space-y-1 mt-1">
                         {item.options.map((opt, optIndex) => (
                           <li key={`${item.id}-opt-${optIndex}`} className="flex items-start">
-                             <MathText text={opt} className={`inline ${opt === item.answer ? 'text-green-600 dark:text-green-400 font-medium' : 'text-foreground/80'}`} />
+                             <MathText text={opt} className={`inline ${opt === item.answer ? 'text-green-500 dark:text-green-400 font-semibold' : 'text-foreground/80'}`} />
                             {opt === item.answer && <CheckCircle className="inline h-4 w-4 ml-2 text-green-600 dark:text-green-400 flex-shrink-0" />}
                           </li>
                         ))}
@@ -531,4 +536,3 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     </div>
   );
 }
-
