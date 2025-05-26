@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { BookText, CheckCircle, ChevronDown, ChevronUp, Image as ImageIcon, Info, ListOrdered, Save, Tag, Type, XCircle, Loader2 } from 'lucide-react';
+import { BookText, CheckCircle, ChevronDown, ChevronUp, Image as ImageIcon, Info, ListOrdered, Save, Tag, Type, XCircle, Loader2, SigmaSquare } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from '@/hooks/use-toast';
 import { saveQuestionToBankAction } from '@/app/actions/quizActions';
@@ -97,6 +97,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                     Q{index + 1}: {item.questionText.substring(0, 80)}{item.questionText.length > 80 ? '...' : ''}
                   </span>
                   <div className="flex items-center gap-2 mt-1 md:mt-0 flex-shrink-0">
+                    {item.marks !== undefined && <Badge variant="outline" className="flex items-center gap-1"><SigmaSquare className="h-3 w-3"/> {item.marks}</Badge>}
                     <Badge variant="outline">{questionTypeLabels[item.questionType]}</Badge>
                     <Badge variant="secondary">{item.suggestedCategory}</Badge>
                     {currentSaveState.isSaved && <Badge variant="default" className="bg-green-600 hover:bg-green-700">Saved</Badge>}
@@ -106,7 +107,14 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
               <AccordionContent>
                 <div className="space-y-3 p-1">
                   <div className="flex justify-between items-start">
-                      <p><strong><BookText className="inline h-4 w-4 mr-1" />Question:</strong> {item.questionText}</p>
+                      <div>
+                        <p><strong><BookText className="inline h-4 w-4 mr-1" />Question:</strong> {item.questionText}</p>
+                        {item.marks !== undefined && (
+                          <p className="text-sm text-muted-foreground mt-1">
+                            <strong><SigmaSquare className="inline h-4 w-4 mr-1" />Marks:</strong> {item.marks}
+                          </p>
+                        )}
+                      </div>
                       <Button 
                           variant={currentSaveState.isSaved ? "default" : "outline"}
                           size="sm" 
@@ -188,3 +196,4 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     </div>
   );
 }
+

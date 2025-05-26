@@ -99,6 +99,7 @@ export type ExtractedQuestion = {
   suggestedTags: string[];
   suggestedCategory: string;
   relevantImageDescription?: string;
+  marks?: number; // Added marks field
 };
 
 export type ExtractQuestionsFromPdfOutput = {
