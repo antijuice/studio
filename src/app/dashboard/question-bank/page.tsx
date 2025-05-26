@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare, PlusCircle, MinusCircle, PlayCircle, Trash2, PackagePlus, Wand2, ArrowLeft, Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
+import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare, PlusCircle, MinusCircle, PlayCircle, Trash2, PackagePlus, Wand2, ArrowLeft, Loader2, Info, Eye } from 'lucide-react';
 import type { ExtractedQuestion, Quiz as QuizType, MCQ as MCQType } from '@/lib/types'; 
 import { MathText } from '@/components/ui/MathText';
 import { useQuestionBank } from '@/contexts/QuestionBankContext';
@@ -17,6 +18,7 @@ import { useQuizAssembly } from '@/contexts/QuizAssemblyContext';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { QuizDisplay } from '@/components/quiz/QuizDisplay';
 import { useToast } from '@/hooks/use-toast';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 const questionTypeLabels: Record<ExtractedQuestion['questionType'], string> = {
   mcq: 'Multiple Choice',
@@ -77,6 +79,10 @@ export default function QuestionBankPage() {
   const [poolIndices, setPoolIndices] = useState<Map<string, number>>(new Map()); // Map<criteriaKey, currentIndex>
   const [lastCriteriaKeyForPool, setLastCriteriaKeyForPool] = useState<string | null>(null);
 
+  // State for View Details Dialog
+  const [isViewDetailsDialogOpen, setIsViewDetailsDialogOpen] = useState(false);
+  const [currentQuestionForView, setCurrentQuestionForView] = useState<ExtractedQuestion | null>(null);
+
 
   const uniqueCategories = React.useMemo(() => 
     Array.from(new Set(bankedQuestions.map(q => q.suggestedCategory))).sort(), 
@@ -117,7 +123,7 @@ export default function QuestionBankPage() {
     setCriteriaForm(prev => ({...prev, [name]: value}));
   }
 
-  const handleGenerateQuizByCriteria = () => {
+ const handleGenerateQuizByCriteria = () => {
     setIsGeneratingQuizByCriteria(true);
 
     const criteriaKey = JSON.stringify({
@@ -129,55 +135,52 @@ export default function QuestionBankPage() {
 
     const criteriaTagsArray = criteriaForm.tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
     
-    // Step 1: Filter ExtractedQuestions that are MCQs and match basic criteria
-    const initialMatchingExtractedQuestions = bankedQuestions.filter(q => {
-      if (q.questionType !== 'mcq') return false; // Only MCQs for this feature
+    const initialMatchingExtractedQuestions = bankedQuestions.filter(eq => {
+      if (eq.questionType !== 'mcq') return false; // Only MCQs for this feature
 
       const matchesDescription = criteriaForm.description.trim() === '' ||
-        q.questionText.toLowerCase().includes(criteriaForm.description.trim().toLowerCase()) ||
-        (q.explanation && q.explanation.toLowerCase().includes(criteriaForm.description.trim().toLowerCase()));
+        eq.questionText.toLowerCase().includes(criteriaForm.description.trim().toLowerCase()) ||
+        (eq.explanation && eq.explanation.toLowerCase().includes(criteriaForm.description.trim().toLowerCase()));
       
       const matchesTags = criteriaTagsArray.length === 0 ||
-        criteriaTagsArray.every(ct => q.suggestedTags.some(qt => qt.toLowerCase().includes(ct)));
+        criteriaTagsArray.every(ct => eq.suggestedTags.some(qt => qt.toLowerCase().includes(ct)));
       
-      const matchesCategory = criteriaForm.category === ALL_FILTER_VALUE || q.suggestedCategory === criteriaForm.category;
+      const matchesCategory = criteriaForm.category === ALL_FILTER_VALUE || eq.suggestedCategory === criteriaForm.category;
       
       return matchesDescription && matchesTags && matchesCategory;
     });
 
-    // Step 2: Map to MCQType and filter for validity (options and answer presence)
     const validQuizMcqs: MCQType[] = initialMatchingExtractedQuestions
       .map(eq => ({
         id: eq.id,
-        question: eq.questionText, // Map questionText to question
+        question: eq.questionText,
         options: eq.options ? [...eq.options] : [],
-        answer: typeof eq.answer === 'string' ? eq.answer : "", // Ensure answer is string
+        answer: typeof eq.answer === 'string' ? eq.answer : "",
         explanation: eq.explanation || "No explanation provided.",
         type: 'mcq' as const, 
       }))
       .filter(q => q.options.length > 0 && q.answer.trim() !== "");
 
 
-    if (validQuizMcqs.length === 0) {
-        if (initialMatchingExtractedQuestions.length > 0) {
-             toast({
-                title: "Not Enough Valid MCQs",
-                description: `Found ${initialMatchingExtractedQuestions.length} MCQs matching your criteria, but none were complete (e.g., missing options or a defined answer) after validation. Please check the banked questions or broaden your criteria.`,
-                variant: "destructive",
-                duration: 7000,
-            });
-        } else {
-            toast({
-                title: "No MCQs Found Matching Criteria",
-                description: "No MCQs in the bank match your specified description, tags, or category. Try broadening your search.",
-                variant: "destructive",
-            });
-        }
-      setIsGeneratingQuizByCriteria(false);
-      return;
+    if (initialMatchingExtractedQuestions.length > 0 && validQuizMcqs.length === 0) {
+        toast({
+            title: "Not Enough Valid MCQs",
+            description: `Found ${initialMatchingExtractedQuestions.length} MCQs matching your criteria, but none were complete (e.g., missing options or a defined answer) after validation. Please check the banked questions or broaden your criteria.`,
+            variant: "destructive",
+            duration: 7000,
+        });
+        setIsGeneratingQuizByCriteria(false);
+        return;
+    } else if (validQuizMcqs.length === 0) {
+         toast({
+            title: "No MCQs Found Matching Criteria",
+            description: "No MCQs in the bank match your specified description, tags, or category. Try broadening your search.",
+            variant: "destructive",
+        });
+        setIsGeneratingQuizByCriteria(false);
+        return;
     }
-
-    // Now build the pool using IDs of validQuizMcqs
+    
     const validQuizMcqIds = validQuizMcqs.map(q => q.id);
     const currentValidMcqIdsSet = new Set(validQuizMcqIds);
 
@@ -233,13 +236,12 @@ export default function QuestionBankPage() {
     newPoolIndices.set(criteriaKey, newCurrentIndex);
     setPoolIndices(newPoolIndices);
 
-    // Get the full MCQ objects for the selected IDs
     const finalQuizQuestions: MCQType[] = selectedQuestionIds
       .map(id => validQuizMcqs.find(mcq => mcq.id === id))
       .filter(Boolean) as MCQType[];
 
 
-    if (finalQuizQuestions.length === 0) { // Should ideally not happen if numToSelect > 0 and currentShuffledIds had items
+    if (finalQuizQuestions.length === 0) { 
       toast({
         title: "No Questions Selected",
         description: "Could not select any questions for the quiz, though a pool was available.",
@@ -253,7 +255,7 @@ export default function QuestionBankPage() {
     if (finalQuizQuestions.length < criteriaForm.numQuestions && !poolCycledThisTurn) {
       quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}) were available or valid.`;
     } else if (finalQuizQuestions.length < criteriaForm.numQuestions && poolCycledThisTurn) {
-       quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}). All available questions have been used.`;
+       quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}). All available questions in this pool have been used.`;
     }
 
     if (poolCycledThisTurn) {
@@ -261,7 +263,7 @@ export default function QuestionBankPage() {
         title: "Question Pool Cycled",
         description: `All available questions for these criteria shown. Pool re-shuffled. ${quizGeneratedMessage}`,
         variant: "default",
-        duration: 5000,
+        duration: 6000,
       });
     } else {
          toast({
@@ -281,6 +283,7 @@ export default function QuestionBankPage() {
     setCurrentQuiz(newQuiz);
     setIsGeneratingQuizByCriteria(false);
   };
+
 
   const handleStartAssembledQuiz = () => {
     const assembled = getAssembledQuestions();
@@ -333,6 +336,11 @@ export default function QuestionBankPage() {
       createdAt: new Date(),
     };
     setCurrentQuiz(newQuiz);
+  };
+
+  const handleOpenViewDetails = (question: ExtractedQuestion) => {
+    setCurrentQuestionForView(question);
+    setIsViewDetailsDialogOpen(true);
   };
 
 
@@ -576,6 +584,14 @@ export default function QuestionBankPage() {
                       )}
                     </CardContent>
                     <CardFooter className="flex justify-end gap-2 border-t pt-4 mt-4">
+                       <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-muted-foreground hover:text-foreground"
+                          onClick={() => handleOpenViewDetails(question)}
+                        >
+                          <Eye className="mr-2 h-4 w-4" /> View Details
+                        </Button>
                       <Tooltip>
                           <TooltipTrigger asChild>
                               <Button 
@@ -649,9 +665,103 @@ export default function QuestionBankPage() {
                 </ul>
             </CardContent>
         </Card>
+
+        {/* View Details Dialog */}
+      {currentQuestionForView && (
+        <Dialog open={isViewDetailsDialogOpen} onOpenChange={setIsViewDetailsDialogOpen}>
+          <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><Info className="h-6 w-6 text-primary" /> Question Details</DialogTitle>
+              <DialogDescription>
+                Viewing the full details of the selected question.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4 overflow-y-auto flex-grow pr-2">
+              <div>
+                <Label className="font-semibold text-sm">Question Text:</Label>
+                <MathText text={currentQuestionForView.questionText} className="mt-1 p-2 border rounded-md bg-muted/30 text-base" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <Label className="font-semibold text-sm">Type:</Label>
+                    <p className="mt-1 text-sm"><Badge variant="outline">{questionTypeLabels[currentQuestionForView.questionType]}</Badge></p>
+                </div>
+                <div>
+                    <Label className="font-semibold text-sm">Category:</Label>
+                    <p className="mt-1 text-sm"><Badge variant="secondary">{currentQuestionForView.suggestedCategory}</Badge></p>
+                </div>
+              </div>
+              
+              {currentQuestionForView.marks !== undefined && (
+                <div>
+                    <Label className="font-semibold text-sm">Marks:</Label>
+                    <p className="mt-1 text-sm">{currentQuestionForView.marks}</p>
+                </div>
+              )}
+
+              {currentQuestionForView.questionType === 'mcq' && currentQuestionForView.options && (
+                <div>
+                  <Label className="font-semibold text-sm">Options:</Label>
+                  <ul className="list-none mt-1 space-y-1">
+                    {currentQuestionForView.options.map((opt, index) => (
+                      <li key={`view-opt-${index}`} className={`p-2 border rounded-md text-sm flex items-start gap-1.5 ${opt === currentQuestionForView.answer ? 'bg-green-500/10 border-green-500/30 text-green-700' : 'bg-card'}`}>
+                         <span className="font-mono text-xs opacity-70">{(index + 1)}.</span> <MathText text={opt} /> {opt === currentQuestionForView.answer && <CheckCircle className="inline h-4 w-4 ml-auto text-green-600 flex-shrink-0" />}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {currentQuestionForView.questionType !== 'mcq' && currentQuestionForView.answer && (
+                 <div>
+                  <Label className="font-semibold text-sm">Answer:</Label>
+                  <div className="mt-1 p-2 border rounded-md bg-green-500/10 border-green-500/30 text-sm">
+                    <MathText text={currentQuestionForView.answer} />
+                  </div>
+                </div>
+              )}
+
+              {currentQuestionForView.explanation && (
+                <div>
+                  <Label className="font-semibold text-sm">Explanation:</Label>
+                  <div className="mt-1 p-2 border rounded-md bg-muted/50 text-sm">
+                    <MathText text={currentQuestionForView.explanation} />
+                  </div>
+                </div>
+              )}
+              
+              {currentQuestionForView.relevantImageDescription && (
+                 <div>
+                  <Label className="font-semibold text-sm">Relevant Image Information:</Label>
+                  <p className="mt-1 p-2 border rounded-md bg-muted/30 text-sm italic">{currentQuestionForView.relevantImageDescription}</p>
+                </div>
+              )}
+
+              {currentQuestionForView.suggestedTags && currentQuestionForView.suggestedTags.length > 0 && (
+                <div>
+                  <Label className="font-semibold text-sm">Tags:</Label>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {currentQuestionForView.suggestedTags.map(tag => (
+                      <Badge key={`view-tag-${tag}`} variant="secondary">{tag}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+               {!currentQuestionForView.options && currentQuestionForView.questionType === 'mcq' && <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Missing Options</AlertTitle><AlertDescription>This MCQ is missing its options.</AlertDescription></Alert>}
+               {!currentQuestionForView.answer && <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Missing Answer</AlertTitle><AlertDescription>The answer for this question is not defined.</AlertDescription></Alert>}
+
+
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline">Close</Button>
+              </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
     </TooltipProvider>
   );
 }
-
-    
