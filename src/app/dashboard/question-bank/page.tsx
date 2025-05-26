@@ -135,7 +135,6 @@ export default function QuestionBankPage() {
 
     const criteriaTagsArray = criteriaForm.tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
     
-    // Step 1: Filter all banked questions by criteria (description, tags, category) and ensure they are MCQs.
     const initialMatchingExtractedQuestions = bankedQuestions.filter(eq => {
       if (eq.questionType !== 'mcq') return false;
 
@@ -151,11 +150,10 @@ export default function QuestionBankPage() {
       return matchesDescription && matchesTags && matchesCategory;
     });
 
-    // Step 2: Map these to MCQType and then filter for *valid* MCQs (have options and a non-empty answer)
     const validQuizMcqs: MCQType[] = initialMatchingExtractedQuestions
       .map(eq => ({
         id: eq.id,
-        question: eq.questionText,
+        question: eq.questionText, // Ensure this mapping happens
         options: eq.options ? [...eq.options] : [],
         answer: typeof eq.answer === 'string' ? eq.answer : "",
         explanation: eq.explanation || "No explanation provided.",
@@ -183,7 +181,6 @@ export default function QuestionBankPage() {
         return;
     }
     
-    // The pool for cycling now consists *only* of IDs of pre-validated MCQs
     const validQuizMcqIds = validQuizMcqs.map(q => q.id);
     const currentValidMcqIdsSet = new Set(validQuizMcqIds);
 
