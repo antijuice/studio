@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import type { ExtractQuestionsFromPdfOutput, ExtractedQuestion, SaveQuestionToBankOutput } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,12 +10,15 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BookText, CheckCircle, ImageIcon, Info, ListOrdered, Save, Tag, Type, XCircle, Loader2, SigmaSquare, Filter, TagsIcon } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
+import { BookText, CheckCircle, Edit, ImageIcon, Info, ListOrdered, Save, Tag, Type, XCircle, Loader2, SigmaSquare, Filter, TagsIcon, AlertTriangle } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from '@/hooks/use-toast';
 import { saveQuestionToBankAction } from '@/app/actions/quizActions';
 import { Separator } from '../ui/separator';
 import { MathText } from '../ui/MathText';
+import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 
 interface ExtractedQuestionsDisplayProps {
   extractionResult: ExtractQuestionsFromPdfOutput;
@@ -37,13 +40,47 @@ type QuestionSaveStateType = {
   }
 };
 
+// Define a type for the data being edited in the dialog
+type EditableQuestionData = Omit<ExtractedQuestion, 'id' | 'questionType'> & {
+  id?: string; // id might not be there if we were creating a new one
+  questionType?: ExtractedQuestion['questionType']; // also might not be there
+};
+
+
 export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestionsDisplayProps) {
   const { toast } = useToast();
   const [saveStates, setSaveStates] = useState<QuestionSaveStateType>({});
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all'); // Renamed to avoid conflict
   const [tagSearchTerm, setTagSearchTerm] = useState('');
   const [isSavingAll, setIsSavingAll] = useState(false);
+
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [currentQuestionForEdit, setCurrentQuestionForEdit] = useState<ExtractedQuestion | null>(null);
+  const [editedData, setEditedData] = useState<Partial<EditableQuestionData>>({});
+
+
+  useEffect(() => {
+    if (currentQuestionForEdit) {
+      setEditedData({ ...currentQuestionForEdit });
+    } else {
+      setEditedData({});
+    }
+  }, [currentQuestionForEdit]);
+
+  const handleInputChange = (field: keyof EditableQuestionData, value: any) => {
+    setEditedData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleOptionChange = (index: number, value: string) => {
+    const newOptions = [...(editedData.options || [])];
+    newOptions[index] = value;
+    setEditedData(prev => ({ ...prev, options: newOptions }));
+  };
+  
+  const handleMcqAnswerChange = (value: string) => {
+    setEditedData(prev => ({ ...prev, answer: value }));
+  };
 
 
   const uniqueCategories = useMemo(() => {
@@ -66,8 +103,8 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
         question.questionText.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (question.explanation && question.explanation.toLowerCase().includes(searchTerm.toLowerCase()));
       
-      const matchesCategory = selectedCategory === '' || selectedCategory === 'all' || 
-        question.suggestedCategory === selectedCategory;
+      const matchesCategory = selectedCategoryFilter === '' || selectedCategoryFilter === 'all' || 
+        question.suggestedCategory === selectedCategoryFilter;
       
       const matchesTags = searchTagsArray.length === 0 || 
         searchTagsArray.every(searchTag => 
@@ -76,15 +113,15 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
 
       return matchesSearchTerm && matchesCategory && matchesTags;
     });
-  }, [extractionResult, searchTerm, selectedCategory, tagSearchTerm]);
+  }, [extractionResult, searchTerm, selectedCategoryFilter, tagSearchTerm]);
 
   const unsavedFilteredQuestions = useMemo(() => {
     return filteredQuestions.filter(q => !saveStates[q.id]?.isSaved);
   }, [filteredQuestions, saveStates]);
 
-  const handleSaveToBank = useCallback(async (question: ExtractedQuestion): Promise<boolean> => {
-    setSaveStates(prev => ({ ...prev, [question.id]: { isLoading: true, isSaved: false } }));
-    if (!isSavingAll) { // Only show individual toast if not part of "Save All"
+  const triggerSaveProcess = useCallback(async (questionToSave: ExtractedQuestion): Promise<boolean> => {
+    setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: true, isSaved: false } }));
+    if (!isSavingAll) {
       toast({
         title: "Saving Question...",
         description: `Attempting to save question to the bank.`,
@@ -92,9 +129,9 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     }
 
     try {
-      const result: SaveQuestionToBankOutput = await saveQuestionToBankAction(question);
+      const result: SaveQuestionToBankOutput = await saveQuestionToBankAction(questionToSave);
       if (result.success) {
-        setSaveStates(prev => ({ ...prev, [question.id]: { isLoading: false, isSaved: true } }));
+        setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: false, isSaved: true } }));
         if (!isSavingAll) {
           toast({
             title: "Question Saved",
@@ -103,7 +140,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
         }
         return true;
       } else {
-        setSaveStates(prev => ({ ...prev, [question.id]: { isLoading: false, isSaved: false, error: result.message } }));
+        setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: false, isSaved: false, error: result.message } }));
         if (!isSavingAll) {
           toast({
             variant: "destructive",
@@ -115,7 +152,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during save.";
-      setSaveStates(prev => ({ ...prev, [question.id]: { isLoading: false, isSaved: false, error: errorMessage } }));
+      setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: false, isSaved: false, error: errorMessage } }));
       if (!isSavingAll) {
         toast({
           variant: "destructive",
@@ -127,6 +164,36 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     }
   }, [toast, isSavingAll]);
 
+  const handleOpenEditDialog = (question: ExtractedQuestion) => {
+    setCurrentQuestionForEdit(question);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleConfirmSaveFromDialog = async () => {
+    if (!currentQuestionForEdit || !editedData.questionText) { // Add basic validation
+      toast({ title: "Cannot Save", description: "Question text cannot be empty.", variant: "destructive" });
+      return;
+    }
+    
+    // Construct the question object to save, merging original with edits
+    const questionToSave: ExtractedQuestion = {
+      ...currentQuestionForEdit,
+      questionText: editedData.questionText || currentQuestionForEdit.questionText,
+      options: editedData.options || currentQuestionForEdit.options,
+      answer: editedData.answer || currentQuestionForEdit.answer,
+      explanation: editedData.explanation || currentQuestionForEdit.explanation,
+      suggestedTags: typeof editedData.suggestedTags === 'string' 
+        ? (editedData.suggestedTags as string).split(',').map(tag => tag.trim()).filter(Boolean) 
+        : editedData.suggestedTags || currentQuestionForEdit.suggestedTags,
+      suggestedCategory: editedData.suggestedCategory || currentQuestionForEdit.suggestedCategory,
+      marks: editedData.marks !== undefined ? Number(editedData.marks) : currentQuestionForEdit.marks,
+      relevantImageDescription: editedData.relevantImageDescription || currentQuestionForEdit.relevantImageDescription,
+    };
+
+    setIsEditDialogOpen(false); // Close dialog before triggering save
+    await triggerSaveProcess(questionToSave);
+    setCurrentQuestionForEdit(null); // Reset
+  };
 
   const handleSaveAll = async () => {
     if (unsavedFilteredQuestions.length === 0) {
@@ -140,28 +207,26 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     setIsSavingAll(true);
     toast({
         title: "Batch Saving Started",
-        description: `Attempting to save ${unsavedFilteredQuestions.length} question(s)...`,
+        description: `Attempting to save ${unsavedFilteredQuestions.length} question(s)... This will save them as-is without individual review.`,
     });
-
-    const results = await Promise.allSettled(
-        unsavedFilteredQuestions.map(q => handleSaveToBank(q))
-    );
 
     let successCount = 0;
     let failureCount = 0;
-    results.forEach(result => {
-        if (result.status === 'fulfilled' && result.value === true) {
+    
+    for (const q of unsavedFilteredQuestions) {
+        const result = await triggerSaveProcess(q); // Call the save function directly
+        if (result) {
             successCount++;
         } else {
             failureCount++;
         }
-    });
+    }
 
     setIsSavingAll(false);
     toast({
         title: "Batch Save Complete",
         description: `${successCount} question(s) saved. ${failureCount > 0 ? `${failureCount} failed.` : ''}`,
-        variant: failureCount > 0 && successCount === 0 ? "destructive" : failureCount > 0 ? "default" : "default", // destructive only if all fail
+        variant: failureCount > 0 && successCount === 0 ? "destructive" : failureCount > 0 ? "default" : "default",
         duration: 5000,
     });
   };
@@ -179,7 +244,6 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     );
   }
   
-
   return (
     <div className="space-y-6">
       <Card className="p-4 sm:p-6 bg-muted/30 border shadow-inner">
@@ -201,7 +265,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
             <Label htmlFor="category-filter" className="flex items-center mb-1 text-sm font-medium">
               <Type className="h-4 w-4 mr-2 text-primary"/>Filter by Category
             </Label>
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <Select value={selectedCategoryFilter} onValueChange={setSelectedCategoryFilter}>
               <SelectTrigger id="category-filter" className="w-full bg-background">
                 <SelectValue placeholder="All Categories" />
               </SelectTrigger>
@@ -266,10 +330,8 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
             <AccordionItem value={item.id} key={item.id}>
               <AccordionTrigger className="hover:no-underline text-left">
                 <div className="flex flex-col md:flex-row md:items-start justify-between w-full pr-2">
-                  {/* Changed md:items-center to md:items-start to allow multi-line text to align top */}
-                  <span className="font-semibold flex-1 mr-2 min-w-0"> {/* Added min-w-0 for flex child */}
-                     <MathText text={`Q${index + 1}: ${item.questionText.substring(0, 800)}`} /> 
-                     {/* Removed substring and ellipsis to allow full text wrapping, also removed md:truncate */}
+                  <span className="font-semibold flex-1 mr-2 min-w-0">
+                     <MathText text={`Q${index + 1}: ${item.questionText}`} className="text-base" />
                   </span>
                   <div className="flex items-center gap-2 mt-1 md:mt-0 flex-shrink-0 flex-wrap">
                     {item.marks !== undefined && <Badge variant="outline" className="flex items-center gap-1"><SigmaSquare className="h-3 w-3"/> {item.marks}</Badge>}
@@ -283,7 +345,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                 <div className="space-y-3 p-1">
                   <div className="flex justify-between items-start">
                       <div>
-                        <p className="font-semibold flex items-start gap-1.5"><BookText className="inline h-4 w-4 mr-1 mt-1 flex-shrink-0" />Question:</p>
+                        <p className="font-semibold flex items-start gap-1.5"><BookText className="inline h-4 w-4 mr-1 mt-1 flex-shrink-0" />Question Text:</p>
                         <MathText text={item.questionText} className="ml-6 prose prose-sm dark:prose-invert max-w-none"/>
                         {item.marks !== undefined && (
                           <p className="text-sm text-muted-foreground mt-1 ml-6">
@@ -294,7 +356,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                       <Button 
                           variant={currentSaveState.isSaved ? "default" : "outline"}
                           size="sm" 
-                          onClick={() => handleSaveToBank(item)}
+                          onClick={() => handleOpenEditDialog(item)}
                           className={`ml-4 flex-shrink-0 ${currentSaveState.isSaved ? "bg-green-600 hover:bg-green-700 text-white" : ""}`}
                           disabled={currentSaveState.isLoading || currentSaveState.isSaved}
                       >
@@ -303,18 +365,18 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                           ) : currentSaveState.isSaved ? (
                             <CheckCircle className="mr-2 h-3 w-3" />
                           ) : (
-                            <Save className="mr-2 h-3 w-3" />
+                            <Edit className="mr-2 h-3 w-3" />
                           )}
-                          {currentSaveState.isLoading ? "Saving..." : currentSaveState.isSaved ? "Saved" : "Save to Bank"}
+                          {currentSaveState.isLoading ? "Saving..." : currentSaveState.isSaved ? "Saved" : "Review & Save"}
                       </Button>
                   </div>
                   
                   {item.questionType === 'mcq' && item.options && item.options.length > 0 && (
                     <div>
                       <strong><ListOrdered className="inline h-4 w-4 mr-1" />Options:</strong>
-                      <ul className="list-none pl-4 space-y-1 mt-1"> {/* Changed to list-none for cleaner look with MathText */}
+                      <ul className="list-none pl-4 space-y-1 mt-1">
                         {item.options.map((opt, optIndex) => (
-                          <li key={`${item.id}-opt-${optIndex}`} className="flex items-start"> {/* Flex for alignment */}
+                          <li key={`${item.id}-opt-${optIndex}`} className="flex items-start">
                              <MathText text={opt} className={`inline ${opt === item.answer ? 'text-green-600 dark:text-green-400 font-medium' : 'text-foreground/80'}`} />
                             {opt === item.answer && <CheckCircle className="inline h-4 w-4 ml-2 text-green-600 dark:text-green-400 flex-shrink-0" />}
                           </li>
@@ -333,7 +395,6 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                     </Alert>
                   )}
                   
-
                   {item.explanation && (
                     <Alert className="bg-muted/40 mt-2">
                       <Info className="inline h-4 w-4 mr-1" />
@@ -376,6 +437,98 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
           )
         })}
       </Accordion>
+
+      {isEditDialogOpen && currentQuestionForEdit && (
+        <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+          setIsEditDialogOpen(open);
+          if (!open) setCurrentQuestionForEdit(null);
+        }}>
+          <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Review & Edit Question</DialogTitle>
+              <DialogDescription>
+                Make any necessary changes to the extracted question details before saving.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4 overflow-y-auto flex-grow pr-2">
+              <div>
+                <Label htmlFor="editText" className="font-semibold">Question Text</Label>
+                <Textarea id="editText" value={editedData.questionText || ''} onChange={(e) => handleInputChange('questionText', e.target.value)} className="mt-1 min-h-[100px]" />
+              </div>
+
+              {currentQuestionForEdit.questionType === 'mcq' && (
+                <>
+                  <div>
+                    <Label className="font-semibold">Options & Correct Answer</Label>
+                    {(editedData.options || []).map((opt, index) => (
+                      <div key={index} className="flex items-center gap-2 mt-1">
+                        <Input 
+                          value={opt} 
+                          onChange={(e) => handleOptionChange(index, e.target.value)}
+                          className="flex-grow"
+                        />
+                         <RadioGroup value={editedData.answer} onValueChange={handleMcqAnswerChange} className="flex items-center">
+                            <RadioGroupItem value={opt} id={`edit-opt-ans-${index}`} />
+                            <Label htmlFor={`edit-opt-ans-${index}`} className="text-xs">Correct</Label>
+                         </RadioGroup>
+                      </div>
+                    ))}
+                    {(!editedData.options || editedData.options.length === 0) && <p className="text-xs text-muted-foreground">No options extracted.</p>}
+                  </div>
+                </>
+              )}
+              
+              {currentQuestionForEdit.questionType !== 'mcq' && (
+                 <div>
+                    <Label htmlFor="editAnswer" className="font-semibold">Answer</Label>
+                    <Textarea id="editAnswer" value={editedData.answer || ''} onChange={(e) => handleInputChange('answer', e.target.value)} className="mt-1" />
+                  </div>
+              )}
+
+              <div>
+                <Label htmlFor="editExplanation" className="font-semibold">Explanation</Label>
+                <Textarea id="editExplanation" value={editedData.explanation || ''} onChange={(e) => handleInputChange('explanation', e.target.value)} className="mt-1 min-h-[80px]" />
+              </div>
+              
+              <div>
+                <Label htmlFor="editCategory" className="font-semibold">Category</Label>
+                <Input id="editCategory" value={editedData.suggestedCategory || ''} onChange={(e) => handleInputChange('suggestedCategory', e.target.value)} className="mt-1" />
+              </div>
+
+              <div>
+                <Label htmlFor="editTags" className="font-semibold">Tags (comma-separated)</Label>
+                <Input id="editTags" value={(editedData.suggestedTags || []).join(', ')} onChange={(e) => handleInputChange('suggestedTags', e.target.value)} className="mt-1" />
+              </div>
+
+              <div>
+                <Label htmlFor="editMarks" className="font-semibold">Marks</Label>
+                <Input id="editMarks" type="number" value={editedData.marks === undefined ? '' : editedData.marks} onChange={(e) => handleInputChange('marks', e.target.value === '' ? undefined : parseInt(e.target.value, 10))} className="mt-1" />
+              </div>
+
+              <div>
+                <Label htmlFor="editImageDesc" className="font-semibold">Relevant Image Description</Label>
+                <Textarea id="editImageDesc" value={editedData.relevantImageDescription || ''} onChange={(e) => handleInputChange('relevantImageDescription', e.target.value)} className="mt-1" />
+              </div>
+               <Alert variant="default" className="bg-primary/10 border-primary/30">
+                  <AlertTriangle className="h-4 w-4 text-primary" />
+                  <AlertTitle className="text-primary">Note on Editing</AlertTitle>
+                  <AlertDescription className="text-primary/80">
+                    Editing mathematical expressions here requires manual LaTeX entry (e.g., $E=mc^2$$ or $$x^2$$). 
+                    The original LaTeX from the PDF is preserved unless you change it.
+                  </AlertDescription>
+              </Alert>
+
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline">Cancel</Button>
+              </DialogClose>
+              <Button onClick={handleConfirmSaveFromDialog}>Confirm & Save to Bank</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
+
