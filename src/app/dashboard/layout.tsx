@@ -44,7 +44,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import React, { useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { QuestionBankProvider } from '@/contexts/QuestionBankContext'; // Added import
+import { QuestionBankProvider } from '@/contexts/QuestionBankContext';
+import { QuizAssemblyProvider } from '@/contexts/QuizAssemblyContext'; // Added import
 
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
@@ -89,12 +90,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
   
   return (
-    <QuestionBankProvider> {/* Added Provider */}
-      <SidebarProvider defaultOpen>
-        <SidebarDecorated>
-          <SidebarInset className="overflow-x-hidden">{children}</SidebarInset>
-        </SidebarDecorated>
-      </SidebarProvider>
+    <QuestionBankProvider>
+      <QuizAssemblyProvider> {/* Added Provider */}
+        <SidebarProvider defaultOpen>
+          <SidebarDecorated>
+            <SidebarInset className="overflow-x-hidden">{children}</SidebarInset>
+          </SidebarDecorated>
+        </SidebarProvider>
+      </QuizAssemblyProvider>
     </QuestionBankProvider>
   );
 }

@@ -7,13 +7,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare } from 'lucide-react';
+import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare, PlusCircle, MinusCircle, PlayCircle, Trash2, PackagePlus } from 'lucide-react';
 import type { ExtractedQuestion } from '@/lib/types'; 
 import { MathText } from '@/components/ui/MathText';
-import { useQuestionBank } from '@/contexts/QuestionBankContext'; // Added import
-
-// Mock data is now removed as we'll use the context
-// const mockBankQuestions: ExtractedQuestion[] = [ ... ];
+import { useQuestionBank } from '@/contexts/QuestionBankContext';
+import { useQuizAssembly } from '@/contexts/QuizAssemblyContext'; // Added import
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Added import
 
 const questionTypeLabels: Record<ExtractedQuestion['questionType'], string> = {
   mcq: 'Multiple Choice',
@@ -34,7 +33,15 @@ const QuestionTypeIcon = ({ type }: { type: ExtractedQuestion['questionType'] })
 const ALL_FILTER_VALUE = "__ALL__";
 
 export default function QuestionBankPage() {
-  const { bankedQuestions } = useQuestionBank(); // Use context
+  const { bankedQuestions } = useQuestionBank();
+  const { 
+    addQuestionToAssembly, 
+    removeQuestionFromAssembly, 
+    isQuestionInAssembly,
+    getAssemblyCount,
+    clearAssembly
+  } = useQuizAssembly();
+
   const [searchTerm, setSearchTerm] = React.useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = React.useState(ALL_FILTER_VALUE);
   const [selectedTypeFilter, setSelectedTypeFilter] = React.useState(ALL_FILTER_VALUE);
@@ -64,8 +71,10 @@ export default function QuestionBankPage() {
     });
   }, [bankedQuestions, searchTerm, selectedCategoryFilter, selectedTypeFilter]);
   
+  const assemblyCount = getAssemblyCount();
 
   return (
+    <TooltipProvider>
     <div className="container mx-auto p-4 md:p-8 space-y-8">
       <header>
         <div className="flex items-center gap-3">
@@ -76,6 +85,37 @@ export default function QuestionBankPage() {
           </div>
         </div>
       </header>
+
+      {/* Quiz Assembly Summary Card */}
+      <Card className="shadow-lg sticky top-20 md:top-4 z-20 bg-card/95 backdrop-blur-sm">
+        <CardHeader>
+            <div className="flex justify-between items-center">
+                <CardTitle className="text-xl flex items-center gap-2"><PackagePlus className="h-6 w-6 text-accent"/>Quiz Assembly</CardTitle>
+                <Badge variant="outline" className="text-lg">{assemblyCount} Questions</Badge>
+            </div>
+        </CardHeader>
+        <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+                Select questions from the bank below to add them to your custom quiz.
+            </p>
+        </CardContent>
+        <CardFooter className="flex flex-col sm:flex-row justify-end gap-2">
+            <Button variant="outline" onClick={clearAssembly} disabled={assemblyCount === 0}>
+                <Trash2 className="mr-2 h-4 w-4" /> Clear Selection
+            </Button>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button disabled={assemblyCount === 0} className="bg-accent hover:bg-accent/90">
+                        <PlayCircle className="mr-2 h-4 w-4" /> Start Quiz with {assemblyCount} Questions
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                    <p>Quiz creation from banked questions is coming soon!</p>
+                </TooltipContent>
+            </Tooltip>
+        </CardFooter>
+      </Card>
+
 
       <Card className="shadow-lg">
         <CardHeader>
@@ -121,61 +161,98 @@ export default function QuestionBankPage() {
             </div>
           ) : filteredQuestions.length > 0 ? (
             <div className="space-y-4">
-              {filteredQuestions.map((question) => (
-                <Card key={question.id} className="shadow-md hover:shadow-lg transition-shadow bg-card">
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                        <div className="text-lg flex items-start gap-2 flex-1 min-w-0">
-                            <QuestionTypeIcon type={question.questionType} />
-                             <MathText text={question.questionText} className="font-medium" />
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
-                            {question.marks !== undefined && (
-                                <Badge variant="outline" className="flex items-center gap-1 text-xs">
-                                    <SigmaSquare className="h-3 w-3"/> {question.marks} Marks
-                                </Badge>
-                            )}
-                            <Badge variant="secondary" className="text-xs">{questionTypeLabels[question.questionType]}</Badge>
-                        </div>
-                    </div>
-                    <CardDescription className="text-xs mt-1 ml-6"> 
-                      Category: <Badge variant="outline" className="text-xs font-normal">{question.suggestedCategory}</Badge>
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pl-6 space-y-3">
-                    {question.questionType === 'mcq' && question.options && (
-                        <div className="text-sm space-y-1 mb-2">
-                            <p className="font-medium text-xs text-muted-foreground mb-1">Options:</p>
-                            {question.options.map((opt, i) => (
-                                <div key={i} className={`ml-4 text-xs flex items-start gap-1.5 ${opt === question.answer ? 'text-green-500 font-semibold' : 'text-foreground/80'}`}>
-                                    <span>•</span> <MathText text={opt} /> {opt === question.answer && <span className="ml-1 text-xs">(Correct)</span>}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                     {question.explanation && (
-                         <div className="text-xs text-muted-foreground italic p-3 bg-muted/30 rounded-md border">
-                           <strong className="not-italic">Explanation:</strong> <MathText text={question.explanation.substring(0,300) + (question.explanation.length > 300 ? '...' : '')} />
-                        </div>
-                     )}
-                    {question.suggestedTags && question.suggestedTags.length > 0 && (
-                        <div className="mt-3 flex flex-wrap items-center gap-1">
-                        <span className="text-xs text-muted-foreground mr-1">Tags:</span>
-                        {question.suggestedTags.slice(0, 5).map(tag => (
-                            <Badge key={tag} variant="secondary" className="text-xs font-normal">
-                            <Tag className="h-3 w-3 mr-1" />{tag}
-                            </Badge>
-                        ))}
-                        {question.suggestedTags.length > 5 && <Badge variant="outline" className="text-xs">...</Badge>}
-                        </div>
-                    )}
-                  </CardContent>
-                  <CardFooter className="flex justify-end gap-2 border-t pt-4 mt-4">
-                    <Button variant="ghost" size="sm" disabled>View Details (Soon)</Button>
-                    <Button variant="outline" size="sm" className="ml-2" disabled>Add to Quiz (Soon)</Button>
-                  </CardFooter>
-                </Card>
-              ))}
+              {filteredQuestions.map((question) => {
+                const isInAssembly = isQuestionInAssembly(question.id);
+                const isMCQ = question.questionType === 'mcq';
+                return (
+                  <Card key={question.id} className="shadow-md hover:shadow-lg transition-shadow bg-card">
+                    <CardHeader>
+                      <div className="flex justify-between items-start">
+                          <div className="text-lg flex items-start gap-2 flex-1 min-w-0">
+                              <QuestionTypeIcon type={question.questionType} />
+                               <MathText text={question.questionText} className="font-medium" />
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+                              {question.marks !== undefined && (
+                                  <Badge variant="outline" className="flex items-center gap-1 text-xs">
+                                      <SigmaSquare className="h-3 w-3"/> {question.marks} Marks
+                                  </Badge>
+                              )}
+                              <Badge variant="secondary" className="text-xs">{questionTypeLabels[question.questionType]}</Badge>
+                          </div>
+                      </div>
+                      <CardDescription className="text-xs mt-1 ml-6"> 
+                        Category: <Badge variant="outline" className="text-xs font-normal">{question.suggestedCategory}</Badge>
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="pl-6 space-y-3">
+                      {question.questionType === 'mcq' && question.options && (
+                          <div className="text-sm space-y-1 mb-2">
+                              <p className="font-medium text-xs text-muted-foreground mb-1">Options:</p>
+                              {question.options.map((opt, i) => (
+                                  <div key={i} className={`ml-4 text-xs flex items-start gap-1.5 ${opt === question.answer ? 'text-green-500 font-semibold' : 'text-foreground/80'}`}>
+                                      <span>•</span> <MathText text={opt} /> {opt === question.answer && <span className="ml-1 text-xs">(Correct)</span>}
+                                  </div>
+                              ))}
+                          </div>
+                      )}
+                       {question.explanation && (
+                           <div className="text-xs text-muted-foreground italic p-3 bg-muted/30 rounded-md border">
+                             <strong className="not-italic">Explanation:</strong> <MathText text={question.explanation.substring(0,300) + (question.explanation.length > 300 ? '...' : '')} />
+                          </div>
+                       )}
+                      {question.suggestedTags && question.suggestedTags.length > 0 && (
+                          <div className="mt-3 flex flex-wrap items-center gap-1">
+                          <span className="text-xs text-muted-foreground mr-1">Tags:</span>
+                          {question.suggestedTags.slice(0, 5).map(tag => (
+                              <Badge key={tag} variant="secondary" className="text-xs font-normal">
+                              <Tag className="h-3 w-3 mr-1" />{tag}
+                              </Badge>
+                          ))}
+                          {question.suggestedTags.length > 5 && <Badge variant="outline" className="text-xs">...</Badge>}
+                          </div>
+                      )}
+                    </CardContent>
+                    <CardFooter className="flex justify-end gap-2 border-t pt-4 mt-4">
+                      <Tooltip>
+                          <TooltipTrigger asChild>
+                              <Button variant="ghost" size="sm" disabled>View Details</Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>View full details (Coming Soon)</p></TooltipContent>
+                      </Tooltip>
+
+                      {!isMCQ ? (
+                         <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="outline" size="sm" className="ml-2" disabled>
+                                    Unsupported Type
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Only MCQs can be added to quizzes currently.</p></TooltipContent>
+                        </Tooltip>
+                      ) : isInAssembly ? (
+                        <Button 
+                          variant="destructive" 
+                          size="sm" 
+                          className="ml-2"
+                          onClick={() => removeQuestionFromAssembly(question.id)}
+                        >
+                          <MinusCircle className="mr-2 h-4 w-4" /> Remove from Quiz
+                        </Button>
+                      ) : (
+                        <Button 
+                          variant="default" 
+                          size="sm" 
+                          className="ml-2 bg-primary hover:bg-primary/90"
+                          onClick={() => addQuestionToAssembly(question)}
+                        >
+                          <PlusCircle className="mr-2 h-4 w-4" /> Add to New Quiz
+                        </Button>
+                      )}
+                    </CardFooter>
+                  </Card>
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-10">
@@ -205,5 +282,6 @@ export default function QuestionBankPage() {
             </CardContent>
         </Card>
     </div>
+    </TooltipProvider>
   );
 }
