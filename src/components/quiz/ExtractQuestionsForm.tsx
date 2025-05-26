@@ -16,10 +16,12 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import type { ExtractQuestionsFromPdfOutput, ExtractQuestionsFromPdfInput } from "@/lib/types";
 import { extractQuestionsFromPdfAction } from "@/app/actions/quizActions";
-import { Sparkles, UploadCloud, Tags, Loader2 } from "lucide-react";
+import { Sparkles, UploadCloud, Tags, Loader2, Lightbulb, MessageSquareText } from "lucide-react";
 import React, { useState } from "react";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB for potentially larger PDFs with questions
@@ -35,6 +37,8 @@ const formSchema = z.object({
     ),
   topicHint: z.string().max(500).optional(),
   globalTags: z.string().max(200).optional().describe("Comma-separated tags to apply to all questions."),
+  autoSuggestMcqAnswers: z.boolean().default(false).optional(),
+  autoSuggestExplanations: z.boolean().default(false).optional(),
 });
 
 interface ExtractQuestionsFormProps {
@@ -51,6 +55,8 @@ export function ExtractQuestionsForm({ onExtractionComplete, setIsLoading }: Ext
     defaultValues: {
       topicHint: "",
       globalTags: "",
+      autoSuggestMcqAnswers: true, // Default to true for convenience
+      autoSuggestExplanations: true, // Default to true for convenience
     },
   });
 
@@ -61,7 +67,7 @@ export function ExtractQuestionsForm({ onExtractionComplete, setIsLoading }: Ext
       form.setValue("pdfFile", files);
     } else {
       setFileName(null);
-      form.setValue("pdfFile", new DataTransfer().files); // Use new DataTransfer to create an empty FileList
+      form.setValue("pdfFile", new DataTransfer().files); 
     }
   };
 
@@ -78,6 +84,8 @@ export function ExtractQuestionsForm({ onExtractionComplete, setIsLoading }: Ext
           pdfDataUri,
           topicHint: values.topicHint,
           globalTags: values.globalTags,
+          autoSuggestMcqAnswers: values.autoSuggestMcqAnswers,
+          autoSuggestExplanations: values.autoSuggestExplanations,
         };
         const result = await extractQuestionsFromPdfAction(input);
 
@@ -181,6 +189,61 @@ export function ExtractQuestionsForm({ onExtractionComplete, setIsLoading }: Ext
             </FormItem>
           )}
         />
+
+        <div className="space-y-4 rounded-md border p-4 bg-muted/30">
+            <FormLabel className="text-base font-semibold">AI Auto-Suggestion Options</FormLabel>
+            <FormField
+            control={form.control}
+            name="autoSuggestMcqAnswers"
+            render={({ field }) => (
+                <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                <FormControl>
+                    <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    disabled={isSubmitting}
+                    id="autoSuggestMcqAnswers"
+                    />
+                </FormControl>
+                <div className="space-y-1 leading-none">
+                    <Label htmlFor="autoSuggestMcqAnswers" className="flex items-center cursor-pointer">
+                        <Lightbulb className="mr-2 h-4 w-4 text-yellow-500" />
+                        Automatically suggest answers for MCQs if missing
+                    </Label>
+                    <FormDescription>
+                        If an MCQ is extracted without a clear answer, the AI will try to pick one from the options.
+                    </FormDescription>
+                </div>
+                </FormItem>
+            )}
+            />
+            <FormField
+            control={form.control}
+            name="autoSuggestExplanations"
+            render={({ field }) => (
+                <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                <FormControl>
+                    <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    disabled={isSubmitting}
+                    id="autoSuggestExplanations"
+                    />
+                </FormControl>
+                <div className="space-y-1 leading-none">
+                    <Label htmlFor="autoSuggestExplanations" className="flex items-center cursor-pointer">
+                       <MessageSquareText className="mr-2 h-4 w-4 text-blue-500" />
+                        Automatically suggest explanations if missing
+                    </Label>
+                    <FormDescription>
+                        If a question is extracted without an explanation, the AI will try to generate one.
+                    </FormDescription>
+                </div>
+                </FormItem>
+            )}
+            />
+        </div>
+
         <Button type="submit" className="w-full" disabled={isSubmitting || !fileName}>
           {isSubmitting ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />

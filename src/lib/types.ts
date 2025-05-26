@@ -131,6 +131,8 @@ export type ExtractQuestionsFromPdfInput = {
   pdfDataUri: string;
   topicHint?: string;
   globalTags?: string; // Comma-separated tags
+  autoSuggestMcqAnswers?: boolean; // New field
+  autoSuggestExplanations?: boolean; // New field
 };
 
 // Output for saving a question to the bank (can be expanded later)

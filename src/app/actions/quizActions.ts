@@ -8,7 +8,7 @@ import {
 } from "@/ai/flows/generate-custom-quiz";
 import { 
   generateQuizFromPdf as genQuizFromPdfAI, 
-  type GenerateQuizFromPdfInput, 
+  type GenerateQuizFromPdfInput as GenQuizFromPdfAIInput, // Aliased to avoid conflict 
   type GenerateQuizFromPdfOutput 
 } from "@/ai/flows/generate-quiz-from-pdf";
 import { 
@@ -18,7 +18,7 @@ import {
 } from "@/ai/flows/evaluate-short-answer";
 import {
   extractQuestionsFromPdf as extractQuestionsAI,
-  type ExtractQuestionsFromPdfInput,
+  type ExtractQuestionsFromPdfInput as AIExtractQuestionsInput, // Aliased to avoid conflict
   type ExtractQuestionsFromPdfOutput as AIExtractQuestionsOutput, 
 } from "@/ai/flows/extract-questions-from-pdf-flow";
 import {
@@ -28,7 +28,7 @@ import {
 } from "@/ai/flows/suggest-mcq-answer-flow";
 import {
   suggestExplanation as suggestExplanationAI,
-  type SuggestExplanationInput, // Ensure correct type is imported
+  type SuggestExplanationInput, 
   type SuggestExplanationOutput,
 } from "@/ai/flows/suggest-explanation-flow";
 import type { 
@@ -37,7 +37,8 @@ import type {
   ShortAnswerEvaluationOutput, 
   ExtractedQuestion, 
   ExtractQuestionsFromPdfOutput, 
-  SaveQuestionToBankOutput
+  SaveQuestionToBankOutput,
+  ExtractQuestionsFromPdfInput // This is the type for our action's input
 } from "@/lib/types"; 
 
 export async function generateCustomQuizAction(input: GenerateCustomQuizInput): Promise<CustomQuizGenOutput> {
@@ -50,7 +51,7 @@ export async function generateCustomQuizAction(input: GenerateCustomQuizInput): 
   }
 }
 
-export async function generateQuizFromPdfAction(input: GenerateQuizFromPdfInput): Promise<PdfQuizGenOutput> {
+export async function generateQuizFromPdfAction(input: GenQuizFromPdfAIInput): Promise<PdfQuizGenOutput> {
   try {
     const result = await genQuizFromPdfAI(input);
     return result as PdfQuizGenOutput;
@@ -74,9 +75,11 @@ export async function evaluateShortAnswerAction(input: EvaluateShortAnswerInput)
   }
 }
 
+// Use the specific input type from lib/types for the action
 export async function extractQuestionsFromPdfAction(input: ExtractQuestionsFromPdfInput): Promise<ExtractQuestionsFromPdfOutput> {
   try {
-    const result: AIExtractQuestionsOutput = await extractQuestionsAI(input);
+    // The input here matches ExtractQuestionsFromPdfInput from lib/types.ts, which now includes the boolean flags
+    const result: AIExtractQuestionsOutput = await extractQuestionsAI(input as AIExtractQuestionsInput);
     
     if (!result || !Array.isArray(result.extractedQuestions)) {
       console.error('Invalid AI output from extractQuestionsAI:', result);
