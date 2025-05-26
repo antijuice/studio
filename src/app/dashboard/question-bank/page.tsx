@@ -309,7 +309,7 @@ export default function QuestionBankPage() {
         id: eq.id,
         question: eq.questionText,
         options: eq.options ? [...eq.options] : [], 
-        answer: typeof eq.answer === 'string' ? eq.answer : "", 
+        answer: typeof eq.answer === 'string' ? eq.answer.trim() : "", 
         explanation: eq.explanation || "No explanation provided.",
         type: 'mcq' as const,
       }))
@@ -405,92 +405,99 @@ export default function QuestionBankPage() {
         </CardFooter>
       </Card>
 
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-xl flex items-center gap-2"><Wand2 className="h-6 w-6 text-primary"/>Start Quiz by Criteria</CardTitle>
-          <CardDescription>Generate a quiz from banked MCQs based on your specifications. The system will try to cycle through all matching questions before repeating.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label htmlFor="criteriaDescription">Description / Topic (searches question text & explanation)</Label>
-            <Textarea 
-              id="criteriaDescription" 
-              name="description" 
-              placeholder="e.g., 'Questions about photosynthesis basics' or 'Easy algebra problems'" 
-              value={criteriaForm.description}
-              onChange={handleCriteriaFormChange}
-              className="mt-1"
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="criteriaTags">Tags (comma-separated, matches if ALL tags present)</Label>
-              <Input 
-                id="criteriaTags" 
-                name="tags" 
-                placeholder="e.g., biology, cell, exam1" 
-                value={criteriaForm.tags}
-                onChange={handleCriteriaFormChange}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="criteriaCategory">Category</Label>
-              <Select 
-                name="category" 
-                value={criteriaForm.category} 
-                onValueChange={(value) => handleCriteriaSelectChange('category', value)}
+      <Accordion type="single" collapsible defaultValue="criteria-quiz" className="w-full">
+        <AccordionItem value="criteria-quiz">
+          <AccordionTrigger className="p-0">
+            <CardHeader className="w-full pb-2">
+              <CardTitle className="text-xl flex items-center gap-2"><Wand2 className="h-6 w-6 text-primary"/>Start Quiz by Criteria</CardTitle>
+              <CardDescription>Generate a quiz from banked MCQs based on your specifications. The system will try to cycle through all matching questions before repeating.</CardDescription>
+            </CardHeader>
+          </AccordionTrigger>
+          <AccordionContent>
+            <CardContent className="space-y-4 pt-4">
+              <div>
+                <Label htmlFor="criteriaDescription">Description / Topic (searches question text & explanation)</Label>
+                <Textarea 
+                  id="criteriaDescription" 
+                  name="description" 
+                  placeholder="e.g., 'Questions about photosynthesis basics' or 'Easy algebra problems'" 
+                  value={criteriaForm.description}
+                  onChange={handleCriteriaFormChange}
+                  className="mt-1"
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="criteriaTags">Tags (comma-separated, matches if ALL tags present)</Label>
+                  <Input 
+                    id="criteriaTags" 
+                    name="tags" 
+                    placeholder="e.g., biology, cell, exam1" 
+                    value={criteriaForm.tags}
+                    onChange={handleCriteriaFormChange}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="criteriaCategory">Category</Label>
+                  <Select 
+                    name="category" 
+                    value={criteriaForm.category} 
+                    onValueChange={(value) => handleCriteriaSelectChange('category', value)}
+                  >
+                    <SelectTrigger id="criteriaCategory" className="mt-1"><SelectValue placeholder="Any Category" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_FILTER_VALUE}>Any Category</SelectItem>
+                      {uniqueCategories.map(cat => <SelectItem key={`crit-cat-${cat}`} value={cat}>{cat}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="criteriaQuestionType">Question Type</Label>
+                  <Select 
+                    name="questionType" 
+                    value={criteriaForm.questionType} 
+                    onValueChange={(value) => handleCriteriaSelectChange('questionType', value)}
+                    disabled 
+                  >
+                    <SelectTrigger id="criteriaQuestionType" className="mt-1"><SelectValue placeholder="Any MCQ Type" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="mcq">Multiple Choice (MCQ)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                   <p className="text-xs text-muted-foreground mt-1">Currently, only MCQs are used for quiz generation by criteria.</p>
+                </div>
+                <div>
+                  <Label htmlFor="criteriaNumQuestions">Number of Questions</Label>
+                  <Input 
+                    id="criteriaNumQuestions" 
+                    name="numQuestions" 
+                    type="number" 
+                    min="1" 
+                    max="50" 
+                    value={criteriaForm.numQuestions}
+                    onChange={handleCriteriaFormChange}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button 
+                onClick={handleGenerateQuizByCriteria} 
+                disabled={isGeneratingQuizByCriteria || bankedQuestions.filter(q => q.questionType === 'mcq').length === 0}
+                className="w-full md:w-auto ml-auto bg-primary hover:bg-primary/90"
               >
-                <SelectTrigger id="criteriaCategory" className="mt-1"><SelectValue placeholder="Any Category" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_FILTER_VALUE}>Any Category</SelectItem>
-                  {uniqueCategories.map(cat => <SelectItem key={`crit-cat-${cat}`} value={cat}>{cat}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="criteriaQuestionType">Question Type</Label>
-              <Select 
-                name="questionType" 
-                value={criteriaForm.questionType} 
-                onValueChange={(value) => handleCriteriaSelectChange('questionType', value)}
-                disabled 
-              >
-                <SelectTrigger id="criteriaQuestionType" className="mt-1"><SelectValue placeholder="Any MCQ Type" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="mcq">Multiple Choice (MCQ)</SelectItem>
-                </SelectContent>
-              </Select>
-               <p className="text-xs text-muted-foreground mt-1">Currently, only MCQs are used for quiz generation by criteria.</p>
-            </div>
-            <div>
-              <Label htmlFor="criteriaNumQuestions">Number of Questions</Label>
-              <Input 
-                id="criteriaNumQuestions" 
-                name="numQuestions" 
-                type="number" 
-                min="1" 
-                max="50" 
-                value={criteriaForm.numQuestions}
-                onChange={handleCriteriaFormChange}
-                className="mt-1"
-              />
-            </div>
-          </div>
-        </CardContent>
-        <CardFooter>
-          <Button 
-            onClick={handleGenerateQuizByCriteria} 
-            disabled={isGeneratingQuizByCriteria || bankedQuestions.filter(q => q.questionType === 'mcq').length === 0}
-            className="w-full md:w-auto ml-auto bg-primary hover:bg-primary/90"
-          >
-            {isGeneratingQuizByCriteria ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlayCircle className="mr-2 h-4 w-4"/> }
-            {isGeneratingQuizByCriteria ? "Generating..." : "Generate & Start Quiz"}
-          </Button>
-        </CardFooter>
-      </Card>
+                {isGeneratingQuizByCriteria ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlayCircle className="mr-2 h-4 w-4"/> }
+                {isGeneratingQuizByCriteria ? "Generating..." : "Generate & Start Quiz"}
+              </Button>
+            </CardFooter>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+
 
       <Card className="shadow-lg">
         <CardHeader>
