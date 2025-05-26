@@ -84,8 +84,8 @@ const ALL_FILTER_VALUE = "__ALL__";
 
 export default function QuestionBankPage() {
   const [searchTerm, setSearchTerm] = React.useState('');
-  const [selectedCategory, setSelectedCategory] = React.useState(ALL_FILTER_VALUE);
-  const [selectedType, setSelectedType] = React.useState(ALL_FILTER_VALUE);
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = React.useState(ALL_FILTER_VALUE);
+  const [selectedTypeFilter, setSelectedTypeFilter] = React.useState(ALL_FILTER_VALUE);
 
   const uniqueCategories = React.useMemo(() => 
     Array.from(new Set(mockBankQuestions.map(q => q.suggestedCategory))).sort(), 
@@ -102,15 +102,15 @@ export default function QuestionBankPage() {
         q.questionText.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (q.explanation && q.explanation.toLowerCase().includes(searchTerm.toLowerCase()));
       
-      const matchesCategory = selectedCategory === ALL_FILTER_VALUE || selectedCategory === '' ||
-        q.suggestedCategory === selectedCategory;
+      const matchesCategory = selectedCategoryFilter === ALL_FILTER_VALUE || selectedCategoryFilter === '' ||
+        q.suggestedCategory === selectedCategoryFilter;
       
-      const matchesType = selectedType === ALL_FILTER_VALUE || selectedType === '' ||
-        q.questionType === selectedType;
+      const matchesType = selectedTypeFilter === ALL_FILTER_VALUE || selectedTypeFilter === '' ||
+        q.questionType === selectedTypeFilter;
         
       return matchesSearch && matchesCategory && matchesType;
     });
-  }, [searchTerm, selectedCategory, selectedType]);
+  }, [searchTerm, selectedCategoryFilter, selectedTypeFilter]);
   
 
   return (
@@ -138,14 +138,14 @@ export default function QuestionBankPage() {
               />
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             </div>
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <Select value={selectedCategoryFilter} onValueChange={setSelectedCategoryFilter}>
               <SelectTrigger><SelectValue placeholder="Filter by Category" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL_FILTER_VALUE}>All Categories</SelectItem>
                 {uniqueCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={selectedType} onValueChange={setSelectedType}>
+            <Select value={selectedTypeFilter} onValueChange={setSelectedTypeFilter}>
               <SelectTrigger><SelectValue placeholder="Filter by Type" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL_FILTER_VALUE}>All Types</SelectItem>
@@ -165,37 +165,37 @@ export default function QuestionBankPage() {
                 <Card key={question.id} className="shadow-md hover:shadow-lg transition-shadow bg-card">
                   <CardHeader>
                     <div className="flex justify-between items-start">
-                        <div className="text-lg flex items-start gap-2 flex-1 min-w-0"> {/* Changed to items-start */}
+                        <div className="text-lg flex items-start gap-2 flex-1 min-w-0">
                             <QuestionTypeIcon type={question.questionType} />
-                             <MathText text={question.questionText} /> {/* Removed substring and truncate */}
+                             <MathText text={question.questionText} className="font-medium" />
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap"> {/* Added flex-wrap */}
+                        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
                             {question.marks !== undefined && (
-                                <Badge variant="outline" className="flex items-center gap-1">
+                                <Badge variant="outline" className="flex items-center gap-1 text-xs">
                                     <SigmaSquare className="h-3 w-3"/> {question.marks} Marks
                                 </Badge>
                             )}
-                            <Badge variant="secondary">{questionTypeLabels[question.questionType]}</Badge>
+                            <Badge variant="secondary" className="text-xs">{questionTypeLabels[question.questionType]}</Badge>
                         </div>
                     </div>
-                    <CardDescription className="text-xs mt-1">
-                      Category: <Badge variant="outline" className="text-xs">{question.suggestedCategory}</Badge>
+                    <CardDescription className="text-xs mt-1 ml-6"> 
+                      Category: <Badge variant="outline" className="text-xs font-normal">{question.suggestedCategory}</Badge>
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="pl-6 space-y-3"> {/* Added pl-6 for alignment with header icon */}
                     {question.questionType === 'mcq' && question.options && (
                         <div className="text-sm space-y-1 mb-2">
                             <p className="font-medium text-xs text-muted-foreground mb-1">Options:</p>
                             {question.options.map((opt, i) => (
-                                <div key={i} className={`ml-2 text-xs flex items-center ${opt === question.answer ? 'text-green-500 font-semibold' : 'text-foreground/80'}`}>
-                                    <span className="mr-1">•</span> <MathText text={opt} /> {opt === question.answer && <span className="ml-1">(Correct)</span>}
+                                <div key={i} className={`ml-4 text-xs flex items-start gap-1.5 ${opt === question.answer ? 'text-green-500 font-semibold' : 'text-foreground/80'}`}>
+                                    <span>•</span> <MathText text={opt} /> {opt === question.answer && <span className="ml-1 text-xs">(Correct)</span>}
                                 </div>
                             ))}
                         </div>
                     )}
                      {question.explanation && (
-                         <div className="text-xs text-muted-foreground italic p-2 bg-muted/30 rounded-md border">
-                           <strong>Explanation:</strong> <MathText text={question.explanation.substring(0,300) + (question.explanation.length > 300 ? '...' : '')} /> {/* Kept substring for brevity here */}
+                         <div className="text-xs text-muted-foreground italic p-3 bg-muted/30 rounded-md border">
+                           <strong className="not-italic">Explanation:</strong> <MathText text={question.explanation.substring(0,300) + (question.explanation.length > 300 ? '...' : '')} />
                         </div>
                      )}
                     {question.suggestedTags && question.suggestedTags.length > 0 && (
@@ -241,10 +241,12 @@ export default function QuestionBankPage() {
                     <li>Verification workflows for quality assurance.</li>
                     <li>Using banked questions to generate new custom quizzes.</li>
                     <li>Advanced search and organization capabilities.</li>
-                    <li>Full LaTeX rendering for complex mathematical notations.</li>
                 </ul>
             </CardContent>
         </Card>
     </div>
   );
 }
+
+
+    
