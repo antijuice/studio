@@ -148,11 +148,7 @@ Important Instructions:
 - If parts of a question (like options or a clear answer) are missing or unclear, extract what is available and omit optional fields as necessary.
 - Ensure the 'answer' for MCQs is the option text, not just a letter/number, unless the options themselves are solely letters/numbers.
 - If the PDF contains sections that are not questions, do not attempt to create question objects for them.
-- Mark Allocation Guidance: If a question in the PDF explicitly indicates a number of marks or points (the "marks" field), interpret this as a guide for the expected depth and comprehensiveness of the answer and/or explanation.
-    - For 'short_answer' or 'fill_in_the_blank' types, ensure the 'answer' field (if one can be determined and contains math, it's in LaTeX) contains enough distinct pieces of information or key concepts to justify the mark allocation.
-    - For all question types, particularly 'mcq' and 'true_false', the 'explanation' field (ensure math is in LaTeX) should be sufficiently detailed to cover the key concepts implied by the mark allocation. For example, a 5-mark question's explanation should ideally touch upon several distinct facets or justifications related to the correct answer.
-    - This does not mean explanations must be artificially long or list a specific number of bullet points, but their informational content should reflect the question's weight. Prioritize accuracy and clarity.
-    - If no marks are specified, generate the answer/explanation based on the question's content as usual.
+- Mark Allocation Guidance: If a question in the PDF explicitly indicates a number of marks or points (the "marks" field), the explanation and/or answer should reflect a corresponding depth and detail to justify this mark allocation. For example, a question worth more marks should typically have a more comprehensive explanation or require a more detailed answer. Ensure all mathematical content within explanations/answers is in LaTeX. Prioritize accuracy and clarity. If no marks are specified, generate the answer/explanation based on the question's content as usual.
 - Adhere strictly to the JSON output format and schema descriptions, including LaTeX formatting for all mathematical content, especially matrices.
 `,
 });
