@@ -21,6 +21,7 @@ import {
   LogOut, // Added LogOut icon
   Loader2,
   Sparkles, // Icon for Extract Questions
+  LibraryBig, // Icon for Question Bank
 } from 'lucide-react';
 import {
   SidebarProvider,
@@ -52,11 +53,12 @@ const navItems = [
     subItems: [
       { href: '/dashboard/quizzes/custom', label: 'Create Custom Quiz', icon: Wand2 },
       { href: '/dashboard/quizzes/pdf-generator', label: 'Quiz from PDF', icon: FileText },
-      { href: '/dashboard/quizzes/extract-pdf', label: 'Extract Questions', icon: Sparkles }, // New link
+      { href: '/dashboard/quizzes/extract-pdf', label: 'Extract Questions', icon: Sparkles },
       { href: '/dashboard/quizzes/short-answer', label: 'Short Answer Practice', icon: MessageSquareText },
       { href: '/dashboard/quizzes/sessions', label: 'Past Sessions', icon: History },
     ],
   },
+  { href: '/dashboard/question-bank', label: 'Question Bank', icon: LibraryBig },
   { href: '/dashboard/multiplayer', label: 'Multiplayer', icon: Users },
   { href: '/dashboard/leaderboard', label: 'Leaderboard', icon: Trophy },
 ];
