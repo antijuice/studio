@@ -113,79 +113,78 @@ const prompt = ai.definePrompt({
   output: {schema: InternalExtractQuestionsFromPdfOutputSchema},
   prompt: `You are an AI assistant specialized in extracting structured information from educational documents, including MCQ exams.
 Your task is to analyze the provided PDF document and extract individual quiz questions from it.
-For each question, you must identify its text, determine its type (especially 'mcq' for multiple choice questions), extract options and the correct answer (if applicable), provide an explanation (if available or inferable), suggest relevant tags, a category, describe any relevant images (that are not directly LaTeX-defined), and identify the number of marks/points if specified.
+For each question, you must identify its text, determine its type, extract options, the correct answer, provide an explanation, suggest tags, a category, describe any relevant images (that are not LaTeX-defined), and identify marks/points if specified.
 
-VERY IMPORTANT: When mathematical expressions or equations are present in the question text, options, answers, or explanations, you MUST preserve them using standard LaTeX notation.
-- Use $...$ for inline mathematics (e.g., 'the value of $x$ is $5 \\times 10^3$').
-- Use $$...$$ for display/block mathematics (e.g., 'solve the equation $$ax^2 + bx + c = 0$$').
-- For matrices, use appropriate LaTeX environments such as 'pmatrix' (for parentheses), 'bmatrix' (for square brackets), 'vmatrix' (for single vertical bars), etc. Inside these environments, use '&' to separate elements in a row and '\\\\' to indicate a new row.
-  Example of a 2x2 matrix with parentheses: $$\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}$$
-  Example of a 2x2 matrix with square brackets: $$\\begin{bmatrix} 1 & 2 \\\\ 3 & 4 \\end{bmatrix}$$
-- For complex diagrams or graphs defined using LaTeX (e.g., TikZ code), preserve the entire LaTeX code block accurately as a string within the $$...$$ delimiters. For example, if you encounter '\\begin{tikzpicture}...\\end{tikzpicture}', it should be extracted as '$$\\begin{tikzpicture}...\\end{tikzpicture}$$'.
-- Ensure all LaTeX is well-formed and correctly represents the mathematical content from the PDF.
+VERY IMPORTANT: Preserve all mathematical expressions (including matrices and complex LaTeX diagrams like TikZ) using standard LaTeX notation ($...$ for inline, $$...$$ for block, and environments like pmatrix for matrices).
 
 Document Content (from PDF):
 {{media url=pdfDataUri}}
 
 {{#if topicHint}}
-The general topic or context of this document is: {{{topicHint}}}. Use this information to guide your tagging, categorization, image relevance assessment, and LaTeX formatting more accurately.
+General topic/context: {{{topicHint}}}. Use this for accuracy in tagging, categorization, and LaTeX formatting.
 {{/if}}
 
+Tagging Instructions:
 {{#if globalTags}}
-The user has provided the following global tags that should be applied to ALL questions extracted: "{{{globalTags}}}".
-Please parse these comma-separated tags. For each question you extract, ensure its "suggestedTags" array includes these global tags. Then, add 2-4 additional specific tags you identify for that particular question. The final "suggestedTags" array should contain both the global tags and the specific tags you've generated. Avoid duplicating tags if a global tag is also highly relevant specifically.
+Apply these global tags to ALL questions: "{{{globalTags}}}". Parse these comma-separated tags. For each question, include these global tags in its "suggestedTags" array, then add 2-4 additional specific tags.
 {{else}}
-For each question, provide 3-5 relevant and specific keywords or tags based on its content for the "suggestedTags" array.
+For each question, provide 3-5 relevant specific keywords/tags for the "suggestedTags" array.
 {{/if}}
 
+Answer Extraction/Suggestion for MCQs:
 {{#if autoSuggestMcqAnswers}}
-Instruction: Auto-Suggest MCQ Answers is ENABLED.
-Task: For every Multiple Choice Question (MCQ):
-1. Attempt to identify the correct answer directly from the PDF text.
-2. If a correct answer is NOT clearly identifiable from the text, you MUST analyze the question and its options to suggest the most plausible correct answer.
-3. The 'answer' field in your output for this MCQ MUST then be populated with the full text of this suggested correct option.
+  **Auto-Suggest MCQ Answers is ENABLED.**
+  For each MCQ:
+  1. First, diligently search the PDF text for an explicitly stated correct answer.
+  2. If you find one with high confidence, use it.
+  3. If you DO NOT find an explicitly stated correct answer, OR if you find something but have low confidence, you **MUST** then analyze the question and its options to determine the most plausible correct answer.
+  4. The 'answer' field for this MCQ in your output **MUST** then be populated with the full text of this chosen correct option. It should not be omitted or empty when this mode is enabled.
 {{else}}
-Instruction: Auto-Suggest MCQ Answers is DISABLED.
-Task: For MCQs, identify the correct answer only if it is explicitly available in the PDF text. If no answer is found, omit the 'answer' field.
+  **Auto-Suggest MCQ Answers is DISABLED.**
+  For each MCQ: Identify the correct answer **ONLY IF** it is explicitly and clearly available in the PDF text.
+  If no such answer is found, you **MUST** omit the 'answer' field in your output or leave it as an empty string. Do not attempt to guess.
 {{/if}}
 
+Explanation Extraction/Generation:
 {{#if autoSuggestExplanations}}
-Instruction: Auto-Suggest Explanations is ENABLED.
-Task: For every question (MCQ, True/False, Short Answer, etc.):
-1. Attempt to identify an explanation directly from the PDF text.
-2. If an explanation is NOT clearly identifiable from the text, you MUST generate a concise and accurate one.
-3. If an answer is available (either extracted or suggested as part of this process), the explanation should align with it and clarify why it's correct. For MCQs, briefly explain why other key options are incorrect if it adds significant value.
-4. Ensure all mathematical content in generated explanations is in proper LaTeX format.
+  **Auto-Suggest Explanations is ENABLED.**
+  For each question:
+  1. First, diligently search the PDF text for an existing explanation.
+  2. If you find one with high confidence, use it.
+  3. If you DO NOT find an explicit explanation, OR if you find one but have low confidence in its quality/relevance, you **MUST** then generate a concise and accurate explanation.
+  4. If an answer is available (extracted or suggested), ensure your explanation aligns with it and clarifies why it's correct. For MCQs, briefly explain why other key options are incorrect if it adds value.
+  5. The 'explanation' field in your output **MUST** be populated with this extracted or generated explanation. It should not be omitted or empty when this mode is enabled.
 {{else}}
-Instruction: Auto-Suggest Explanations is DISABLED.
-Task: For MCQs and True/False questions, identify an explanation only if it is explicitly available in the PDF text or can be trivially inferred. For other question types, only include an explanation if explicitly present in the PDF. If no explanation is found according to these rules, omit the 'explanation' field.
+  **Auto-Suggest Explanations is DISABLED.**
+  For each question: Identify an explanation **ONLY IF** it is explicitly available in the PDF text or can be trivially inferred (e.g., for MCQs and True/False questions based on the answer).
+  For other question types, only include an explanation if explicitly present in the PDF.
+  If no explanation is found according to these rules, you **MUST** omit the 'explanation' field or leave it as an empty string.
 {{/if}}
 
-Please structure your output as a JSON object strictly adhering to the schema provided for "ExtractQuestionsFromPdfOutput".
+Output Structure:
+Please structure your output as a JSON object strictly adhering to the schema for "ExtractQuestionsFromPdfOutput".
 The root object must have a key "extractedQuestions", which is an array of question objects.
-Each question object in the "extractedQuestions" array must have the following fields:
-- "questionText": (string) The full, complete text of the question. Ensure any math (including matrices and complex LaTeX diagrams like TikZ) is in LaTeX.
-- "questionType": (enum: 'mcq', 'short_answer', 'true_false', 'fill_in_the_blank', 'unknown') The identified type of the question. Ensure 'mcq' is used for multiple-choice questions.
-- "options": (array of strings, optional) For 'mcq' type, list all multiple choice options. Each option must have math (including matrices and complex LaTeX diagrams) in LaTeX. Omit if not an MCQ.
-- "answer": (string, optional) The correct answer. Ensure any math (including matrices and complex LaTeX diagrams) in LaTeX.
-    - For 'mcq', this must be the full text of the correct option (e.g., "Paris", not "C"). If autoSuggestMcqAnswers is enabled and no answer is found, provide your best suggestion as per the instruction above.
-    - For 'short_answer' or 'fill_in_the_blank', this is the expected answer text.
-    - For 'true_false', this should be "True" or "False".
-    - Omit this field if the answer is not identifiable or not applicable (unless auto-suggestion is enabled for MCQs).
-- "explanation": (string, optional) An explanation for the correct answer. Ensure any math (including matrices and complex LaTeX diagrams) in LaTeX. If autoSuggestExplanations is enabled and no explanation is found, generate one as per the instruction above. Otherwise, for MCQs and True/False, infer or generate if not present. If not applicable or unidentifiable, omit.
-- "suggestedTags": (array of strings) As instructed above, combine global tags (if provided) with 3-5 question-specific tags.
-- "suggestedCategory": (string) Suggest a single, broader academic subject or category for this question (e.g., "Physics", "Literature", "Ancient History", "Calculus", "Organic Chemistry").
-- "relevantImageDescription": (string, optional) Examine the content of the question and its surrounding area on the same page in the PDF. If there is a distinct visual element (like a diagram, chart, photograph, or illustration) that is *not directly defined in LaTeX* and is *directly and highly relevant* to understanding or answering that specific question, provide a brief description of this visual element. For example, 'A diagram of a plant cell with labels for nucleus and chloroplast, relevant to the question about cell organelles.' If no such specific, relevant visual is present for a question, or if it's just decorative or not on the same page, omit this field. Do not attempt to extract image data itself.
-- "marks": (integer, optional) If the question text or its immediate vicinity explicitly states the number of marks or points it is worth (e.g., "(5 marks)", "[3 pts]", "Worth 4 points"), extract this number as an integer. If no marks are specified, omit this field.
+Each question object must have the fields: "questionText", "questionType", "options" (optional), "answer" (optional, unless auto-suggest enabled for MCQs), "explanation" (optional, unless auto-suggest enabled), "suggestedTags", "suggestedCategory", "relevantImageDescription" (optional), "marks" (optional).
 
-Important Instructions:
-- Focus solely on extracting question-answer units. Ignore non-question text like chapter titles, general instructions not part of a specific question, page numbers, or headers/footers.
-- If a question's type is ambiguous, use 'unknown'.
-- If parts of a question (like options or a clear answer) are missing or unclear, extract what is available and omit optional fields as necessary, unless auto-suggestion is enabled for that field.
-- Ensure the 'answer' for MCQs is the option text, not just a letter/number, unless the options themselves are solely letters/numbers.
-- If the PDF contains sections that are not questions, do not attempt to create question objects for them.
+Detailed Field Instructions:
+- "questionText": Full question text. Math (matrices, TikZ) in LaTeX.
+- "questionType": 'mcq', 'short_answer', 'true_false', 'fill_in_the_blank', 'unknown'.
+- "options": Array of strings for MCQs. Math in LaTeX. Omit if not MCQ.
+- "answer": Correct answer text. Math in LaTeX.
+    - For MCQs: Full text of the correct option. (Follow Auto-Suggest MCQ Answers instruction above).
+    - For 'short_answer'/'fill_in_the_blank': Expected answer text.
+    - For 'true_false': "True" or "False".
+- "explanation": Explanation for the answer. Math in LaTeX. (Follow Auto-Suggest Explanations instruction above).
+- "suggestedTags": Array of strings (global + specific tags).
+- "suggestedCategory": Single broader academic subject/category.
+- "relevantImageDescription": If a non-LaTeX visual on the same page is directly relevant, describe it. Else, omit.
+- "marks": Integer value if specified in PDF. Else, omit.
+
+General Guidelines:
+- Focus on question-answer units. Ignore non-question text.
+- If type is ambiguous, use 'unknown'.
+- Adhere strictly to JSON format and schema.
 - Mark Allocation Guidance (Concise): If marks are specified (e.g., 5 marks), the explanation/answer should ideally cover a corresponding number of key points. Prioritize accuracy and clarity. Ensure all mathematical content is in LaTeX.
-- Adhere strictly to the JSON output format and schema descriptions, including LaTeX formatting for all mathematical content, especially matrices and complex LaTeX diagrams like TikZ.
 `,
 });
 
@@ -205,4 +204,3 @@ const extractQuestionsFromPdfFlow = ai.defineFlow(
     return output;
   }
 );
-
