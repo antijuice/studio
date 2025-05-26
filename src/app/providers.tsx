@@ -1,7 +1,9 @@
+
 "use client";
 
 import React from 'react';
-// Import any context providers here, e.g., from TanStack Query
+import { AuthProvider } from '@/contexts/AuthContext';
+// Import any other context providers here, e.g., from TanStack Query
 // import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // const queryClient = new QueryClient();
@@ -10,10 +12,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // Example with QueryClientProvider:
   // return (
   //   <QueryClientProvider client={queryClient}>
-  //     {children}
+  //     <AuthProvider>{children}</AuthProvider>
   //   </QueryClientProvider>
   // );
 
-  // For now, if no specific providers are needed, just return children
-  return <>{children}</>;
+  return <AuthProvider>{children}</AuthProvider>;
 }

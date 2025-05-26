@@ -1,7 +1,8 @@
-"use client"; // Needed for SidebarProvider and hooks like usePathname
+
+"use client";
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   BookOpenText,
   FileText,
@@ -17,6 +18,8 @@ import {
   BotMessageSquare,
   History,
   Library,
+  LogOut, // Added LogOut icon
+  Loader2
 } from 'lucide-react';
 import {
   SidebarProvider,
@@ -36,7 +39,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
 
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
@@ -55,13 +59,30 @@ const navItems = [
   { href: '/dashboard/leaderboard', label: 'Leaderboard', icon: Trophy },
 ];
 
-const bottomNavItems = [
+// Updated bottomNavItems to include Sign Out functionality via AuthContext
+const bottomNavItems = (handleSignOut: () => void) => [
   { href: '/dashboard/profile', label: 'Profile', icon: UserCircle },
   // { href: '/dashboard/settings', label: 'Settings', icon: Settings },
+  { isButton: true, label: 'Sign Out', icon: LogOut, action: handleSignOut }, // Sign Out button
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [user, loading, router]);
+
+  if (loading || !user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Loader2 className="h-16 w-16 animate-spin text-primary" />
+      </div>
+    );
+  }
   
   return (
     <SidebarProvider defaultOpen>
@@ -75,6 +96,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 function SidebarDecorated({ children }: { children: React.ReactNode }) {
   const { open, toggleSidebar } = useSidebar()
   const pathname = usePathname();
+  const { user, signOut } = useAuth(); // Get user and signOut from AuthContext
+
+  const handleSignOut = async () => {
+    await signOut();
+    // Router push to /login is handled within signOut itself
+  };
 
   return (
     <>
@@ -135,35 +162,47 @@ function SidebarDecorated({ children }: { children: React.ReactNode }) {
         <Separator className="my-2 bg-sidebar-border" />
         <SidebarFooter>
           <SidebarMenu>
-            {bottomNavItems.map((item) => (
-              <SidebarMenuItem key={item.href}>
-                <Link href={item.href} legacyBehavior passHref>
+            {bottomNavItems(handleSignOut).map((item: any) => ( // Added type any for item
+              <SidebarMenuItem key={item.label}>
+                {item.isButton ? (
                   <SidebarMenuButton
-                    isActive={pathname === item.href}
+                    onClick={item.action}
                     className="justify-start"
                     tooltip={item.label}
                   >
                     <item.icon className="h-5 w-5" />
                     <span>{item.label}</span>
                   </SidebarMenuButton>
-                </Link>
+                ) : (
+                  <Link href={item.href} legacyBehavior passHref>
+                    <SidebarMenuButton
+                      isActive={pathname === item.href}
+                      className="justify-start"
+                      tooltip={item.label}
+                    >
+                      <item.icon className="h-5 w-5" />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </Link>
+                )}
               </SidebarMenuItem>
             ))}
           </SidebarMenu>
           <div className="p-4 flex items-center gap-3 border-t border-sidebar-border mt-2">
             <Avatar className="h-9 w-9">
-              <AvatarImage src="https://placehold.co/40x40.png" alt="User Avatar" data-ai-hint="user avatar" />
-              <AvatarFallback>UQ</AvatarFallback>
+              <AvatarImage src={user?.photoURL || "https://placehold.co/40x40.png"} alt="User Avatar" data-ai-hint="user avatar" />
+              <AvatarFallback>
+                {user?.displayName ? user.displayName.substring(0, 2).toUpperCase() : user?.email ? user.email.substring(0,2).toUpperCase() : 'UQ'}
+              </AvatarFallback>
             </Avatar>
             <div className={`transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0 md:opacity-0 group-data-[collapsible=icon]:hidden'}`}>
-              <p className="text-sm font-medium">User Name</p>
-              <p className="text-xs text-muted-foreground">user@example.com</p>
+              <p className="text-sm font-medium truncate">{user?.displayName || "Quelpr User"}</p>
+              <p className="text-xs text-muted-foreground truncate">{user?.email || "user@example.com"}</p>
             </div>
           </div>
         </SidebarFooter>
       </Sidebar>
-      {children} {/* This is where SidebarInset will render its children */}
+      {children}
     </>
   );
 }
-
