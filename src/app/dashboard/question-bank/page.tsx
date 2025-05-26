@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
-import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare, PlusCircle, MinusCircle, PlayCircle, Trash2, PackagePlus, Wand2, ArrowLeft, Loader2, Info, Eye } from 'lucide-react';
+import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare, PlusCircle, MinusCircle, PlayCircle, Trash2, PackagePlus, Wand2, ArrowLeft, Loader2, Info, Eye, AlertTriangle } from 'lucide-react';
 import type { ExtractedQuestion, Quiz as QuizType, MCQ as MCQType } from '@/lib/types'; 
 import { MathText } from '@/components/ui/MathText';
 import { useQuestionBank } from '@/contexts/QuestionBankContext';
@@ -113,6 +113,7 @@ export default function QuestionBankPage() {
 
   const handleCriteriaFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    // This check ensures that select changes are handled by handleCriteriaSelectChange for type safety
     if (e.target.id === 'criteriaCategory' || e.target.id === 'criteriaQuestionType') {
       return; 
     }
@@ -123,7 +124,7 @@ export default function QuestionBankPage() {
     setCriteriaForm(prev => ({...prev, [name]: value}));
   }
 
- const handleGenerateQuizByCriteria = () => {
+  const handleGenerateQuizByCriteria = () => {
     setIsGeneratingQuizByCriteria(true);
 
     const criteriaKey = JSON.stringify({
@@ -149,7 +150,7 @@ export default function QuestionBankPage() {
       
       return matchesDescription && matchesTags && matchesCategory;
     });
-
+    
     const validQuizMcqs: MCQType[] = initialMatchingExtractedQuestions
       .map(eq => ({
         id: eq.id,
@@ -188,9 +189,10 @@ export default function QuestionBankPage() {
     let currentIndex = poolIndices.get(criteriaKey) || 0;
     let poolNeedsRebuild = false;
 
+    // Check if pool needs rebuild due to changed criteria or underlying data changes
     if (criteriaKey !== lastCriteriaKeyForPool || !currentShuffledIds) {
       poolNeedsRebuild = true;
-    } else if (currentShuffledIds) {
+    } else if (currentShuffledIds) { // Pool exists, check if its content matches current valid questions
       const previousPoolSet = new Set(currentShuffledIds);
       if (currentValidMcqIdsSet.size !== previousPoolSet.size || 
           !Array.from(currentValidMcqIdsSet).every(id => previousPoolSet.has(id))) {
@@ -218,16 +220,19 @@ export default function QuestionBankPage() {
     
     const selectedQuestionIds: string[] = [];
     for (let i = 0; i < numToSelect; i++) {
-      const poolReadIndex = (currentIndex + i) % numAvailableInPool;
+      const poolReadIndex = (currentIndex + i) % numAvailableInPool; // Wrap around using modulo
       selectedQuestionIds.push(currentShuffledIds[poolReadIndex]);
     }
 
     const newCurrentIndex = (currentIndex + numToSelect) % numAvailableInPool;
     let poolCycledThisTurn = false;
+    // Check if the pool cycled AND if the number of items available was positive
+    // and the number to select was also positive. This prevents cycle messages for empty initial states.
     if (newCurrentIndex === 0 && (currentIndex + numToSelect >= numAvailableInPool) && numAvailableInPool > 0 && numToSelect > 0) {
       poolCycledThisTurn = true;
+      // Re-shuffle the pool for the next cycle if it completed
       const reShuffledIds = Array.from(currentValidMcqIdsSet).sort(() => 0.5 - Math.random());
-      const updatedShuffledPools = new Map(shuffledPools); 
+      const updatedShuffledPools = new Map(shuffledPools); // Create a new map to ensure state update
       updatedShuffledPools.set(criteriaKey, reShuffledIds);
       setShuffledPools(updatedShuffledPools);
     }
@@ -236,15 +241,16 @@ export default function QuestionBankPage() {
     newPoolIndices.set(criteriaKey, newCurrentIndex);
     setPoolIndices(newPoolIndices);
 
+    // Get full question objects for the quiz
     const finalQuizQuestions: MCQType[] = selectedQuestionIds
       .map(id => validQuizMcqs.find(mcq => mcq.id === id))
-      .filter(Boolean) as MCQType[];
+      .filter(Boolean) as MCQType[]; // Filter out any undefined if IDs somehow mismatch (should not happen)
 
 
     if (finalQuizQuestions.length === 0) { 
       toast({
         title: "No Questions Selected",
-        description: "Could not select any questions for the quiz, though a pool was available.",
+        description: "Could not select any questions for the quiz, though a pool was available. This might be an internal error.",
         variant: "destructive",
       });
       setIsGeneratingQuizByCriteria(false);
@@ -253,15 +259,15 @@ export default function QuestionBankPage() {
     
     let quizGeneratedMessage = `Generated a quiz with ${finalQuizQuestions.length} question(s) from ${numAvailableInPool} available valid MCQs.`;
     if (finalQuizQuestions.length < criteriaForm.numQuestions && !poolCycledThisTurn) {
-      quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}) were available or valid.`;
+      quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}) were available or valid in the bank for these criteria.`;
     } else if (finalQuizQuestions.length < criteriaForm.numQuestions && poolCycledThisTurn) {
-       quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}). All available questions in this pool have been used.`;
+       quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}). All available questions in this pool have been used. Pool has been re-shuffled.`;
     }
 
     if (poolCycledThisTurn) {
        toast({
         title: "Question Pool Cycled",
-        description: `All available questions for these criteria shown. Pool re-shuffled. ${quizGeneratedMessage}`,
+        description: `All available questions for these criteria have been shown. The pool has been re-shuffled. ${quizGeneratedMessage}`,
         variant: "default",
         duration: 6000,
       });
@@ -328,7 +334,6 @@ export default function QuestionBankPage() {
       variant: "default",
     });
     
-
     const newQuiz: QuizType = {
       id: `assembled-quiz-${Date.now()}`,
       title: "My Assembled Quiz",
@@ -336,6 +341,7 @@ export default function QuestionBankPage() {
       createdAt: new Date(),
     };
     setCurrentQuiz(newQuiz);
+    clearAssembly({ suppressToast: true }); // Clear assembly after starting the quiz
   };
 
   const handleOpenViewDetails = (question: ExtractedQuestion) => {
@@ -390,7 +396,7 @@ export default function QuestionBankPage() {
             </p>
         </CardContent>
         <CardFooter className="flex flex-col sm:flex-row justify-end gap-2">
-            <Button variant="outline" onClick={clearAssembly} disabled={assemblyCount === 0}>
+            <Button variant="outline" onClick={() => clearAssembly()} disabled={assemblyCount === 0}>
                 <Trash2 className="mr-2 h-4 w-4" /> Clear Selection
             </Button>
             <Button onClick={handleStartAssembledQuiz} disabled={assemblyCount === 0} className="bg-accent hover:bg-accent/90">

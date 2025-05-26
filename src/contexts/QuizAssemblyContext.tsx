@@ -12,7 +12,7 @@ interface QuizAssemblyContextType {
   isQuestionInAssembly: (questionId: string) => boolean;
   getAssemblyCount: () => number;
   getAssembledQuestions: () => ExtractedQuestion[];
-  clearAssembly: () => void;
+  clearAssembly: (options?: { suppressToast?: boolean }) => void;
 }
 
 const QuizAssemblyContext = createContext<QuizAssemblyContextType | undefined>(undefined);
@@ -57,13 +57,17 @@ export function QuizAssemblyProvider({ children }: { children: React.ReactNode }
     return [...assembledQuestions]; // Return a copy
   }, [assembledQuestions]);
   
-  const clearAssembly = useCallback(() => {
+  const clearAssembly = useCallback((options?: { suppressToast?: boolean }) => {
     if (assembledQuestions.length > 0) {
         setAssembledQuestions([]);
-        toast({ title: "Assembly Cleared", description: "All selected questions have been removed from the assembly." });
+        if (!options?.suppressToast) {
+          toast({ title: "Assembly Cleared", description: "All selected questions have been removed from the assembly." });
+        }
     } else {
-        // Optionally, you could add a toast here if the assembly is already empty
-        // toast({ title: "Assembly Empty", description: "The assembly is already empty." });
+        // Optionally, if not suppressing toast, you could inform that it's already empty
+        if (!options?.suppressToast) {
+            // toast({ title: "Assembly Empty", description: "The assembly is already empty." });
+        }
     }
   }, [assembledQuestions, toast]);
 
