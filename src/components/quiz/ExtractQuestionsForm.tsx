@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import type { ExtractQuestionsFromPdfOutput, ExtractQuestionsFromPdfInput } from "@/lib/types";
 import { extractQuestionsFromPdfAction } from "@/app/actions/quizActions";
-import { Sparkles, UploadCloud, Tags, Loader2 } from "lucide-react"; // Added Loader2
+import { Sparkles, UploadCloud, Tags, Loader2 } from "lucide-react";
 import React, { useState } from "react";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB for potentially larger PDFs with questions
@@ -61,10 +61,10 @@ export function ExtractQuestionsForm({ onExtractionComplete, setIsLoading }: Ext
       form.setValue("pdfFile", files);
     } else {
       setFileName(null);
-      form.setValue("pdfFile", new DataTransfer().files);
+      form.setValue("pdfFile", new DataTransfer().files); // Use new DataTransfer to create an empty FileList
     }
   };
-  
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     const file = values.pdfFile[0];
@@ -80,7 +80,7 @@ export function ExtractQuestionsForm({ onExtractionComplete, setIsLoading }: Ext
           globalTags: values.globalTags,
         };
         const result = await extractQuestionsFromPdfAction(input);
-        
+
         onExtractionComplete(result);
         toast({
           title: "Extraction Complete!",
@@ -115,7 +115,7 @@ export function ExtractQuestionsForm({ onExtractionComplete, setIsLoading }: Ext
         <FormField
           control={form.control}
           name="pdfFile"
-          render={({ field }) => ( 
+          render={({ field }) => (
             <FormItem>
               <FormLabel>PDF Document</FormLabel>
               <FormControl>
@@ -129,10 +129,10 @@ export function ExtractQuestionsForm({ onExtractionComplete, setIsLoading }: Ext
                             <p className="text-xs text-muted-foreground">PDF (MAX. 10MB)</p>
                             {fileName && <p className="text-xs text-primary mt-2">{fileName}</p>}
                         </div>
-                        <Input 
-                          id="pdf-upload-extract" 
-                          type="file" 
-                          className="hidden" 
+                        <Input
+                          id="pdf-upload-extract"
+                          type="file"
+                          className="hidden"
                           accept=".pdf"
                           onChange={handleFileChange}
                           disabled={isSubmitting}
