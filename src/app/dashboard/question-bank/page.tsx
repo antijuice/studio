@@ -7,8 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle } from 'lucide-react';
-import type { ExtractedQuestion } from '@/lib/types'; // Re-using for mock data structure
+import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare } from 'lucide-react';
+import type { ExtractedQuestion } from '@/lib/types'; 
 
 // Mock data for the question bank - replace with actual data fetching later
 const mockBankQuestions: ExtractedQuestion[] = [
@@ -45,13 +45,22 @@ const mockBankQuestions: ExtractedQuestion[] = [
   {
     id: 'bank-q4',
     questionText: 'Solve for x: 2x + 5 = 15',
-    questionType: 'mcq', // Could be short_answer too
+    questionType: 'mcq', 
     options: ['x = 3', 'x = 5', 'x = 7', 'x = 10'],
     answer: 'x = 5',
     explanation: 'Subtract 5 from both sides: 2x = 10. Divide by 2: x = 5.',
     suggestedTags: ['mathematics', 'algebra', 'equations'],
     suggestedCategory: 'Mathematics',
     marks: 3,
+  },
+  {
+    id: 'bank-q5',
+    questionText: 'Define "fill_in_the_blank" question type.',
+    questionType: 'fill_in_the_blank',
+    answer: 'A question type where the user needs to supply missing words in a sentence or phrase.',
+    explanation: 'These are useful for testing recall of specific terms or concepts.',
+    suggestedTags: ['pedagogy', 'assessment', 'question types'],
+    suggestedCategory: 'Education',
   },
 ];
 
@@ -67,27 +76,42 @@ const QuestionTypeIcon = ({ type }: { type: ExtractedQuestion['questionType'] })
   if (type === 'mcq') return <ListChecks className="h-4 w-4 text-blue-500" />;
   if (type === 'short_answer') return <MessageSquare className="h-4 w-4 text-green-500" />;
   if (type === 'true_false') return <CheckCircle className="h-4 w-4 text-purple-500" />;
-  return <FileText className="h-4 w-4 text-gray-500" />;
+  if (type === 'fill_in_the_blank') return <FileText className="h-4 w-4 text-orange-500" />;
+  return <FileText className="h-4 w-4 text-muted-foreground" />;
 };
 
 const ALL_FILTER_VALUE = "__ALL__";
 
 export default function QuestionBankPage() {
-  // Basic state for filters - will be expanded later
   const [searchTerm, setSearchTerm] = React.useState('');
-  const [selectedCategory, setSelectedCategory] = React.useState('');
-  const [selectedType, setSelectedType] = React.useState('');
+  const [selectedCategory, setSelectedCategory] = React.useState(ALL_FILTER_VALUE);
+  const [selectedType, setSelectedType] = React.useState(ALL_FILTER_VALUE);
 
-  const filteredQuestions = mockBankQuestions.filter(q => {
-    const matchesSearch = searchTerm === '' || q.questionText.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === '' || selectedCategory === ALL_FILTER_VALUE || q.suggestedCategory === selectedCategory;
-    const matchesType = selectedType === '' || selectedType === ALL_FILTER_VALUE || q.questionType === selectedType;
-    return matchesSearch && matchesCategory && matchesType;
-  });
+  const uniqueCategories = React.useMemo(() => 
+    Array.from(new Set(mockBankQuestions.map(q => q.suggestedCategory))).sort(), 
+    []
+  );
+  const uniqueTypes = React.useMemo(() => 
+    Array.from(new Set(mockBankQuestions.map(q => q.questionType))).sort(),
+    []
+  );
+
+  const filteredQuestions = React.useMemo(() => {
+    return mockBankQuestions.filter(q => {
+      const matchesSearch = searchTerm === '' || 
+        q.questionText.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (q.explanation && q.explanation.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+      const matchesCategory = selectedCategory === ALL_FILTER_VALUE || 
+        q.suggestedCategory === selectedCategory;
+      
+      const matchesType = selectedType === ALL_FILTER_VALUE || 
+        q.questionType === selectedType;
+        
+      return matchesSearch && matchesCategory && matchesType;
+    });
+  }, [searchTerm, selectedCategory, selectedType]);
   
-  const uniqueCategories = Array.from(new Set(mockBankQuestions.map(q => q.suggestedCategory))).sort();
-  const uniqueTypes = Array.from(new Set(mockBankQuestions.map(q => q.questionType))).sort();
-
 
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8">
@@ -107,7 +131,7 @@ export default function QuestionBankPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
             <div className="relative">
               <Input 
-                placeholder="Search questions..." 
+                placeholder="Search questions or explanations..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -125,7 +149,11 @@ export default function QuestionBankPage() {
               <SelectTrigger><SelectValue placeholder="Filter by Type" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL_FILTER_VALUE}>All Types</SelectItem>
-                {uniqueTypes.map(type => <SelectItem key={type} value={type}>{questionTypeLabels[type as ExtractedQuestion['questionType']]}</SelectItem>)}
+                {uniqueTypes.map(type => (
+                  <SelectItem key={type} value={type}>
+                    {questionTypeLabels[type as ExtractedQuestion['questionType']]}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -134,42 +162,55 @@ export default function QuestionBankPage() {
           {filteredQuestions.length > 0 ? (
             <div className="space-y-4">
               {filteredQuestions.map((question) => (
-                <Card key={question.id} className="shadow-md hover:shadow-lg transition-shadow">
+                <Card key={question.id} className="shadow-md hover:shadow-lg transition-shadow bg-card">
                   <CardHeader>
                     <div className="flex justify-between items-start">
                         <CardTitle className="text-lg flex items-center gap-2">
                             <QuestionTypeIcon type={question.questionType} />
                             {question.questionText.substring(0,100)}{question.questionText.length > 100 ? '...' : ''}
                         </CardTitle>
-                        {question.marks && <Badge variant="outline">{question.marks} Marks</Badge>}
+                        <div className="flex items-center gap-2">
+                            {question.marks !== undefined && (
+                                <Badge variant="outline" className="flex items-center gap-1">
+                                    <SigmaSquare className="h-3 w-3"/> {question.marks} Marks
+                                </Badge>
+                            )}
+                            <Badge variant="secondary">{questionTypeLabels[question.questionType]}</Badge>
+                        </div>
                     </div>
-                    <CardDescription className="text-xs">
-                      Category: {question.suggestedCategory}
+                    <CardDescription className="text-xs mt-1">
+                      Category: <Badge variant="outline" className="text-xs">{question.suggestedCategory}</Badge>
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     {question.questionType === 'mcq' && question.options && (
                         <div className="text-sm space-y-1 mb-2">
+                            <p className="font-medium text-xs text-muted-foreground mb-1">Options:</p>
                             {question.options.map((opt, i) => (
-                                <p key={i} className={`${opt === question.answer ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}>• {opt}</p>
+                                <p key={i} className={`ml-2 text-xs ${opt === question.answer ? 'text-green-500 font-semibold' : 'text-foreground/80'}`}>
+                                    • {opt} {opt === question.answer && '(Correct)'}
+                                </p>
                             ))}
                         </div>
                     )}
                      {question.explanation && (
-                         <p className="text-xs text-muted-foreground italic p-2 bg-muted/30 rounded-md">
+                         <p className="text-xs text-muted-foreground italic p-2 bg-muted/30 rounded-md border">
                            <strong>Explanation:</strong> {question.explanation.substring(0,150)}{question.explanation.length > 150 ? '...' : ''}
                         </p>
                      )}
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {question.suggestedTags.slice(0, 5).map(tag => (
-                        <Badge key={tag} variant="secondary" className="text-xs">
-                          <Tag className="h-3 w-3 mr-1" />{tag}
-                        </Badge>
-                      ))}
-                      {question.suggestedTags.length > 5 && <Badge variant="outline" className="text-xs">...</Badge>}
-                    </div>
+                    {question.suggestedTags && question.suggestedTags.length > 0 && (
+                        <div className="mt-3 flex flex-wrap items-center gap-1">
+                        <span className="text-xs text-muted-foreground mr-1">Tags:</span>
+                        {question.suggestedTags.slice(0, 5).map(tag => (
+                            <Badge key={tag} variant="secondary" className="text-xs font-normal">
+                            <Tag className="h-3 w-3 mr-1" />{tag}
+                            </Badge>
+                        ))}
+                        {question.suggestedTags.length > 5 && <Badge variant="outline" className="text-xs">...</Badge>}
+                        </div>
+                    )}
                   </CardContent>
-                  <CardFooter className="flex justify-end">
+                  <CardFooter className="flex justify-end gap-2 border-t pt-4 mt-4">
                     <Button variant="ghost" size="sm" disabled>View Details (Soon)</Button>
                     <Button variant="outline" size="sm" className="ml-2" disabled>Add to Quiz (Soon)</Button>
                   </CardFooter>
@@ -185,23 +226,24 @@ export default function QuestionBankPage() {
           )}
         </CardContent>
       </Card>
-       <Card className="mt-8 shadow-sm">
+       <Card className="mt-8 shadow-sm border-dashed">
             <CardHeader>
                 <CardTitle className="text-xl">Feature Under Development</CardTitle>
+                <CardDescription>This Question Bank currently uses mock data for demonstration.</CardDescription>
             </CardHeader>
             <CardContent>
                 <p className="text-muted-foreground">
-                    This Question Bank is currently showing mock data. Future updates will allow you to:
+                    Future updates will enable:
                 </p>
                 <ul className="list-disc list-inside text-muted-foreground mt-2 space-y-1 text-sm">
-                    <li>View and manage questions actually saved from the "Extract Questions" feature.</li>
-                    <li>Manually add and edit questions.</li>
-                    <li>Verify questions for quality.</li>
-                    <li>Use these banked questions to generate new custom quizzes.</li>
+                    <li>Displaying questions actually saved from the "Extract Questions from PDF" feature.</li>
+                    <li>Manually adding and editing questions directly in the bank.</li>
+                    <li>Verification workflows for quality assurance.</li>
+                    <li>Using banked questions to generate new custom quizzes.</li>
+                    <li>Advanced search and organization capabilities.</li>
                 </ul>
             </CardContent>
         </Card>
     </div>
   );
 }
-
