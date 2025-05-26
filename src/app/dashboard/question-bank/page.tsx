@@ -45,7 +45,7 @@ interface CriteriaQuizFormState {
 }
 
 export default function QuestionBankPage() {
-  const { bankedQuestions } = useQuestionBank();
+  const { bankedQuestions, removeQuestionFromBank } = useQuestionBank(); // Added removeQuestionFromBank
   const { 
     addQuestionToAssembly, 
     removeQuestionFromAssembly, 
@@ -124,12 +124,12 @@ export default function QuestionBankPage() {
       description: criteriaForm.description.trim().toLowerCase(),
       tags: criteriaForm.tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean).sort().join(','),
       category: criteriaForm.category,
-      questionType: criteriaForm.questionType, // Should be 'mcq'
+      questionType: criteriaForm.questionType, 
     });
 
     const criteriaTagsArray = criteriaForm.tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
     const allMatchingQuestions = bankedQuestions.filter(q => {
-      if (q.questionType !== 'mcq') return false; // Hard filter for MCQs for this feature
+      if (q.questionType !== 'mcq') return false; 
 
       const matchesDescription = criteriaForm.description.trim() === '' ||
         q.questionText.toLowerCase().includes(criteriaForm.description.trim().toLowerCase()) ||
@@ -160,9 +160,8 @@ export default function QuestionBankPage() {
     if (criteriaKey !== lastCriteriaKeyForPool || !currentShuffledIds) {
       poolNeedsRebuild = true;
     } else {
-      // Simple heuristic: if the number of matching questions has changed, rebuild pool for this criteria
-      if (currentShuffledIds && allMatchingQuestions.length !== currentShuffledIds.length) {
-        poolNeedsRebuild = true;
+      if (currentShuffledIds && allMatchingQuestions.map(q=>q.id).sort().join(',') !== currentShuffledIds.sort().join(',')) {
+         poolNeedsRebuild = true;
       }
     }
     
@@ -197,10 +196,9 @@ export default function QuestionBankPage() {
     setPoolIndices(newPoolIndices);
 
     let cycledToastShown = false;
-    if (newCurrentIndex === 0 && (currentIndex + numToSelect >= numAvailableInPool) && numAvailableInPool > 0) {
-      // Just completed a full cycle. Re-shuffle for the *next* time.
+    if (newCurrentIndex === 0 && (currentIndex + numToSelect >= numAvailableInPool) && numAvailableInPool > 0 && numToSelect > 0) {
       const reShuffledIds = allMatchingQuestions.map(q => q.id).sort(() => 0.5 - Math.random());
-      const updatedShuffledPools = new Map(shuffledPools); // get latest
+      const updatedShuffledPools = new Map(shuffledPools); 
       updatedShuffledPools.set(criteriaKey, reShuffledIds);
       setShuffledPools(updatedShuffledPools);
       
@@ -214,7 +212,7 @@ export default function QuestionBankPage() {
     }
 
     const selectedExtractedQuestions = selectedQuestionIds
-      .map(id => allMatchingQuestions.find(q => q.id === id)) // Get full question objects
+      .map(id => allMatchingQuestions.find(q => q.id === id)) 
       .filter(Boolean) as ExtractedQuestion[];
 
     const mappedQuestions: MCQType[] = selectedExtractedQuestions
@@ -224,7 +222,7 @@ export default function QuestionBankPage() {
         options: eq.options ? [...eq.options] : [],
         answer: typeof eq.answer === 'string' ? eq.answer : "",
         explanation: eq.explanation || "No explanation provided.",
-        type: 'mcq' as const, // Ensure type is literally 'mcq'
+        type: 'mcq' as const, 
       }))
       .filter(q => q.options.length > 0 && q.answer.trim() !== "");
 
@@ -271,7 +269,7 @@ export default function QuestionBankPage() {
     }
 
     const mcqQuestionsForQuiz: MCQType[] = assembled
-      .filter(eq => eq.questionType === 'mcq') // Ensure only MCQs
+      .filter(eq => eq.questionType === 'mcq') 
       .map(eq => ({
         id: eq.id,
         question: eq.questionText,
@@ -280,7 +278,7 @@ export default function QuestionBankPage() {
         explanation: eq.explanation || "No explanation provided.",
         type: 'mcq' as const,
       }))
-      .filter(q => q.options.length > 0 && q.answer.trim() !== ""); // Final validation
+      .filter(q => q.options.length > 0 && q.answer.trim() !== ""); 
 
     if (mcqQuestionsForQuiz.length === 0) {
       toast({
@@ -552,9 +550,16 @@ export default function QuestionBankPage() {
                     <CardFooter className="flex justify-end gap-2 border-t pt-4 mt-4">
                       <Tooltip>
                           <TooltipTrigger asChild>
-                              <Button variant="ghost" size="sm" disabled>View Details</Button>
+                              <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  className="text-red-500 hover:bg-red-500/10 hover:text-red-600 border-red-500/50"
+                                  onClick={() => removeQuestionFromBank(question.id)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" /> Remove from Bank
+                              </Button>
                           </TooltipTrigger>
-                          <TooltipContent><p>View full details (Coming Soon)</p></TooltipContent>
+                          <TooltipContent><p>Remove this question from your current session's bank.</p></TooltipContent>
                       </Tooltip>
 
                       {!isMCQ ? (
@@ -620,5 +625,3 @@ export default function QuestionBankPage() {
     </TooltipProvider>
   );
 }
-
-    
