@@ -26,8 +26,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
+    // Ensure dark class for ShadCN compatibility if needed, though variables are in :root
     <html lang="en" className="dark">
-      {/* Ensure dark class for ShadCN compatibility if needed, though variables are in :root */}
+      <head />
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <Providers>
           {children}
