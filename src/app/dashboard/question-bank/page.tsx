@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare, PlusCircle, MinusCircle, PlayCircle, Trash2, PackagePlus, Wand2, ArrowLeft } from 'lucide-react';
+import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare, PlusCircle, MinusCircle, PlayCircle, Trash2, PackagePlus, Wand2, ArrowLeft, Loader2 } from 'lucide-react';
 import type { ExtractedQuestion, Quiz as QuizType, MCQ as MCQType } from '@/lib/types'; 
 import { MathText } from '@/components/ui/MathText';
 import { useQuestionBank } from '@/contexts/QuestionBankContext';
@@ -51,6 +51,7 @@ export default function QuestionBankPage() {
     removeQuestionFromAssembly, 
     isQuestionInAssembly,
     getAssemblyCount,
+    getAssembledQuestions,
     clearAssembly
   } = useQuizAssembly();
   const { toast } = useToast();
@@ -160,7 +161,7 @@ export default function QuestionBankPage() {
       poolNeedsRebuild = true;
     } else {
       // Simple heuristic: if the number of matching questions has changed, rebuild pool for this criteria
-      if (allMatchingQuestions.length !== currentShuffledIds.length) {
+      if (currentShuffledIds && allMatchingQuestions.length !== currentShuffledIds.length) {
         poolNeedsRebuild = true;
       }
     }
@@ -216,14 +217,16 @@ export default function QuestionBankPage() {
       .map(id => allMatchingQuestions.find(q => q.id === id)) // Get full question objects
       .filter(Boolean) as ExtractedQuestion[];
 
-    const mappedQuestions: MCQType[] = selectedExtractedQuestions.map(eq => ({
-      id: eq.id,
-      question: eq.questionText,
-      options: eq.options ? [...eq.options] : [],
-      answer: typeof eq.answer === 'string' ? eq.answer : "",
-      explanation: eq.explanation || "No explanation provided.",
-      type: 'mcq',
-    })).filter(q => q.options.length > 0 && q.answer.trim() !== "");
+    const mappedQuestions: MCQType[] = selectedExtractedQuestions
+      .map(eq => ({
+        id: eq.id,
+        question: eq.questionText,
+        options: eq.options ? [...eq.options] : [],
+        answer: typeof eq.answer === 'string' ? eq.answer : "",
+        explanation: eq.explanation || "No explanation provided.",
+        type: 'mcq' as const, // Ensure type is literally 'mcq'
+      }))
+      .filter(q => q.options.length > 0 && q.answer.trim() !== "");
 
 
     if (mappedQuestions.length === 0) {
@@ -255,6 +258,56 @@ export default function QuestionBankPage() {
     setCurrentQuiz(newQuiz);
     setIsGeneratingQuizByCriteria(false);
   };
+
+  const handleStartAssembledQuiz = () => {
+    const assembled = getAssembledQuestions();
+    if (assembled.length === 0) {
+      toast({
+        title: "Assembly Empty",
+        description: "Please add some MCQs to your assembly first.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const mcqQuestionsForQuiz: MCQType[] = assembled
+      .filter(eq => eq.questionType === 'mcq') // Ensure only MCQs
+      .map(eq => ({
+        id: eq.id,
+        question: eq.questionText,
+        options: eq.options ? [...eq.options] : [],
+        answer: typeof eq.answer === 'string' ? eq.answer : "",
+        explanation: eq.explanation || "No explanation provided.",
+        type: 'mcq' as const,
+      }))
+      .filter(q => q.options.length > 0 && q.answer.trim() !== ""); // Final validation
+
+    if (mcqQuestionsForQuiz.length === 0) {
+      toast({
+        title: "No Valid MCQs in Assembly",
+        description: "None of the selected questions were complete MCQs (e.g., missing options or a defined answer).",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (mcqQuestionsForQuiz.length < assembled.length) {
+       toast({
+        title: "Some Assembled Questions Not Used",
+        description: `Created a quiz with ${mcqQuestionsForQuiz.length} valid MCQs. Some selected items might have been non-MCQs or incomplete.`,
+        variant: "default",
+      });
+    }
+
+    const newQuiz: QuizType = {
+      id: `assembled-quiz-${Date.now()}`,
+      title: "My Assembled Quiz",
+      questions: mcqQuestionsForQuiz,
+      createdAt: new Date(),
+    };
+    setCurrentQuiz(newQuiz);
+  };
+
 
   if (currentQuiz) {
     return (
@@ -289,7 +342,7 @@ export default function QuestionBankPage() {
         </div>
       </header>
 
-      <Card className="shadow-lg sticky top-4 md:top-20 z-20 bg-card/95 backdrop-blur-sm border">
+      <Card className="shadow-lg sticky top-4 md:top-[calc(theme(spacing.16)+theme(spacing.4))] z-20 bg-card/95 backdrop-blur-sm border">
         <CardHeader>
             <div className="flex justify-between items-center">
                 <CardTitle className="text-xl flex items-center gap-2"><PackagePlus className="h-6 w-6 text-accent"/>Quiz Assembly</CardTitle>
@@ -305,16 +358,9 @@ export default function QuestionBankPage() {
             <Button variant="outline" onClick={clearAssembly} disabled={assemblyCount === 0}>
                 <Trash2 className="mr-2 h-4 w-4" /> Clear Selection
             </Button>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button disabled={assemblyCount === 0} className="bg-accent hover:bg-accent/90">
-                        <PlayCircle className="mr-2 h-4 w-4" /> Start Quiz with {assemblyCount} Assembled Questions
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                    <p>Taking quizzes from assembled questions is coming soon!</p>
-                </TooltipContent>
-            </Tooltip>
+            <Button onClick={handleStartAssembledQuiz} disabled={assemblyCount === 0} className="bg-accent hover:bg-accent/90">
+                <PlayCircle className="mr-2 h-4 w-4" /> Start Quiz with {assemblyCount} Assembled Questions
+            </Button>
         </CardFooter>
       </Card>
 
@@ -374,6 +420,7 @@ export default function QuestionBankPage() {
                 <SelectTrigger id="criteriaQuestionType" className="mt-1"><SelectValue placeholder="Any MCQ Type" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="mcq">Multiple Choice (MCQ)</SelectItem>
+                  {/* Future: Add other types if QuizDisplay supports them for criteria generation */}
                 </SelectContent>
               </Select>
                <p className="text-xs text-muted-foreground mt-1">Currently, only MCQs are used for quiz generation by criteria.</p>
@@ -399,7 +446,7 @@ export default function QuestionBankPage() {
             disabled={isGeneratingQuizByCriteria || bankedQuestions.filter(q => q.questionType === 'mcq').length === 0}
             className="w-full md:w-auto ml-auto bg-primary hover:bg-primary/90"
           >
-            <PlayCircle className="mr-2 h-4 w-4"/> 
+            {isGeneratingQuizByCriteria ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlayCircle className="mr-2 h-4 w-4"/> }
             {isGeneratingQuizByCriteria ? "Generating..." : "Generate & Start Quiz"}
           </Button>
         </CardFooter>
@@ -573,6 +620,5 @@ export default function QuestionBankPage() {
     </TooltipProvider>
   );
 }
-
 
     
