@@ -46,7 +46,7 @@ import React, { useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { QuestionBankProvider } from '@/contexts/QuestionBankContext';
 import { QuizAssemblyProvider } from '@/contexts/QuizAssemblyContext';
-import { QuizSessionProvider } from '@/contexts/QuizSessionContext'; // Added import
+import { QuizSessionProvider } from '@/contexts/QuizSessionContext';
 
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
@@ -91,12 +91,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
   
   return (
-    <QuizSessionProvider> {/* Added Provider */}
+    <QuizSessionProvider>
       <QuestionBankProvider>
         <QuizAssemblyProvider> 
           <SidebarProvider defaultOpen>
             <SidebarDecorated>
-              <SidebarInset className="overflow-x-hidden overflow-y-auto">{children}</SidebarInset>
+              <SidebarInset className="overflow-y-auto overflow-x-hidden">{children}</SidebarInset>
             </SidebarDecorated>
           </SidebarProvider>
         </QuizAssemblyProvider>
@@ -229,7 +229,7 @@ function SidebarDecorated({ children }: { children: React.ReactNode }) {
       </Sidebar>
       
       {/* The SidebarInset is the main content area */}
-      <div className="flex-1 md:ml-[var(--sidebar-width)] group-data-[state=collapsed]:md:ml-[var(--sidebar-width-icon)] transition-[margin-left] duration-200 ease-linear">
+      <div className="flex-1 md:ml-[var(--sidebar-width)] peer-data-[state=collapsed]:md:ml-[var(--sidebar-width-icon)]">
         {children}
       </div>
     </>
