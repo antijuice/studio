@@ -120,6 +120,11 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   const handleMcqAnswerChange = (value: string) => {
     setEditedData(prev => ({ ...prev, answer: value }));
   };
+  
+  const handleTrueFalseAnswerChange = (value: "True" | "False") => {
+    setEditedData(prev => ({ ...prev, answer: value }));
+  };
+
 
   const uniqueCategories = useMemo(() => {
     if (!editableQuestions) return [];
@@ -160,7 +165,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   const triggerSaveProcess = useCallback(async (questionToSave: ExtractedQuestion): Promise<boolean> => {
     setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: true, isSaved: false } }));
 
-    if (!isSavingAll) { // Only show individual toast if not part of "Save All"
+    if (!isSavingAll) { 
       toast({
         title: "Saving Question...",
         description: `Attempting to save question "${questionToSave.questionText.substring(0, 30)}..." to bank.`,
@@ -171,7 +176,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       const result: SaveQuestionToBankOutput = await saveQuestionToBankAction(questionToSave);
       if (result.success) {
         setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: false, isSaved: true } }));
-        addQuestionToBank(questionToSave); // Add to context after successful save
+        addQuestionToBank(questionToSave); 
         if (!isSavingAll) {
           toast({
             title: "Question Saved",
@@ -234,11 +239,10 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       questionType: editedData.questionType || currentQuestionForEdit.questionType,
     };
     
-    // Update local editable state first for immediate UI feedback
     setEditableQuestions(prev => prev.map(q => q.id === questionToSave.id ? questionToSave : q));
     setIsEditDialogOpen(false);
     
-    await triggerSaveProcess(questionToSave); // This will handle context update and toasts
+    await triggerSaveProcess(questionToSave); 
     setCurrentQuestionForEdit(null);
   };
 
@@ -260,7 +264,6 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     let successCount = 0;
     let failureCount = 0;
 
-    // We need to ensure we are saving the versions from editableQuestions
     const questionsToProcess = editableQuestions.filter(eq => 
         unsavedFilteredQuestions.some(ufq => ufq.id === eq.id)
     );
@@ -287,8 +290,8 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   };
 
   const handleAISuggestAnswerInDialog = async () => {
-    if (!currentQuestionForEdit || !editedData.questionText || !editedData.options || editedData.options.length === 0) {
-      toast({ title: "Cannot Suggest", description: "Question text and options must be available to suggest an answer.", variant: "destructive" });
+    if (!currentQuestionForEdit || !editedData.questionText || editedData.questionType !== 'mcq' || !editedData.options || editedData.options.length === 0) {
+      toast({ title: "Cannot Suggest", description: "Question text and options must be available for an MCQ to suggest an answer.", variant: "destructive" });
       return;
     }
     setIsSuggestingAnswerInDialog(true);
@@ -591,7 +594,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
             <AccordionItem value={item.id} key={item.id}>
               <AccordionTrigger className="hover:no-underline text-left">
                 <div className="flex flex-col md:flex-row md:items-start justify-between w-full pr-2">
-                  <div className="font-semibold flex-1 mr-2 min-w-0">
+                  <div className="font-semibold flex-1 mr-2 min-w-0 overflow-hidden">
                      <MathText text={`Q${index + 1}: ${item.questionText}`} className="text-base block" />
                   </div>
                   <div className="flex items-center gap-2 mt-1 md:mt-0 flex-shrink-0 flex-wrap">
@@ -699,7 +702,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
         })}
       </Accordion>
 
-      {isEditDialogOpen && currentQuestionForEdit && (
+      {isEditDialogOpen && currentQuestionForEdit && editedData.questionType && (
         <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
           setIsEditDialogOpen(open);
           if (!open) {
@@ -710,7 +713,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
         }}>
           <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
             <DialogHeader>
-              <DialogTitle>Review &amp; Edit Question</DialogTitle>
+              <DialogTitle>Review & Edit Question</DialogTitle>
               <DialogDescription>
                 Make any necessary changes to the extracted question details before saving.
               </DialogDescription>
@@ -721,10 +724,11 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                 <Textarea id="editText" value={editedData.questionText || ''} onChange={(e) => handleInputChange('questionText', e.target.value)} className="mt-1 min-h-[100px]" />
               </div>
 
+              {/* Answer/Options Editing Section based on Question Type */}
               {editedData.questionType === 'mcq' && (
                 <>
                   <div>
-                    <Label className="font-semibold">Options &amp; Correct Answer</Label>
+                    <Label className="font-semibold">Options & Correct Answer</Label>
                     {(editedData.options || []).map((opt, index) => (
                       <div key={index} className="flex items-center gap-2 mt-1">
                         <Input
@@ -734,7 +738,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                         />
                         <RadioGroup value={editedData.answer} onValueChange={handleMcqAnswerChange} className="flex items-center">
                           <RadioGroupItem value={opt} id={`edit-opt-ans-${index}`} />
-                          <Label htmlFor={`edit-opt-ans-${index}`} className="text-xs">Correct</Label>
+                          <Label htmlFor={`edit-opt-ans-${index}`} className="text-xs cursor-pointer">Correct</Label>
                         </RadioGroup>
                       </div>
                     ))}
@@ -755,12 +759,42 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                 </>
               )}
 
-              {editedData.questionType !== 'mcq' && (
+              {editedData.questionType === 'true_false' && (
                 <div>
-                  <Label htmlFor="editAnswer" className="font-semibold">Answer</Label>
-                  <Textarea id="editAnswer" value={editedData.answer || ''} onChange={(e) => handleInputChange('answer', e.target.value)} className="mt-1" />
+                  <Label className="font-semibold">Correct Answer</Label>
+                  <RadioGroup
+                    value={editedData.answer}
+                    onValueChange={(value) => handleTrueFalseAnswerChange(value as "True" | "False")}
+                    className="mt-1 space-y-1"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="True" id="edit-ans-true" />
+                      <Label htmlFor="edit-ans-true" className="cursor-pointer">True</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="False" id="edit-ans-false" />
+                      <Label htmlFor="edit-ans-false" className="cursor-pointer">False</Label>
+                    </div>
+                  </RadioGroup>
                 </div>
               )}
+
+              {(editedData.questionType === 'short_answer' || editedData.questionType === 'fill_in_the_blank') && (
+                <div>
+                  <Label htmlFor="editAnswerText" className="font-semibold">Answer</Label>
+                  <Textarea id="editAnswerText" value={editedData.answer || ''} onChange={(e) => handleInputChange('answer', e.target.value)} className="mt-1" />
+                </div>
+              )}
+              
+              {editedData.questionType === 'unknown' && (
+                 <div>
+                  <Label htmlFor="editAnswerUnknown" className="font-semibold">Answer (Type Unknown)</Label>
+                  <Textarea id="editAnswerUnknown" value={editedData.answer || ''} onChange={(e) => handleInputChange('answer', e.target.value)} className="mt-1" />
+                   <p className="text-xs text-muted-foreground mt-1">Question type is 'unknown'. Please verify and consider changing the type if possible before saving.</p>
+                </div>
+              )}
+              {/* End of Answer/Options Editing Section */}
+
 
               <div>
                 <Label htmlFor="editExplanation" className="font-semibold">Explanation</Label>
@@ -812,7 +846,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
               <DialogClose asChild>
                 <Button variant="outline">Cancel</Button>
               </DialogClose>
-              <Button onClick={handleConfirmSaveFromDialog}>Confirm &amp; Save to Bank</Button>
+              <Button onClick={handleConfirmSaveFromDialog}>Confirm & Save to Bank</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
