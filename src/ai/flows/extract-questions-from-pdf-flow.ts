@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Extracts structured questions, tags, and categories from a PDF document using AI.
@@ -11,7 +12,7 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-export const ExtractQuestionsFromPdfInputSchema = z.object({
+const ExtractQuestionsFromPdfInputSchema = z.object({
   pdfDataUri: z
     .string()
     .describe(
@@ -26,7 +27,7 @@ export const ExtractQuestionsFromPdfInputSchema = z.object({
 });
 export type ExtractQuestionsFromPdfInput = z.infer<typeof ExtractQuestionsFromPdfInputSchema>;
 
-export const ExtractedQuestionSchema = z.object({
+const ExtractedQuestionSchema = z.object({
   questionText: z.string().describe('The full text of the question.'),
   questionType: z
     .enum(['mcq', 'short_answer', 'true_false', 'fill_in_the_blank', 'unknown'])
@@ -56,7 +57,7 @@ export const ExtractedQuestionSchema = z.object({
 });
 export type ExtractedQuestion = z.infer<typeof ExtractedQuestionSchema>;
 
-export const ExtractQuestionsFromPdfOutputSchema = z.object({
+const ExtractQuestionsFromPdfOutputSchema = z.object({
   extractedQuestions: z
     .array(ExtractedQuestionSchema)
     .describe(
