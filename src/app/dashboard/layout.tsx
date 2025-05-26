@@ -37,6 +37,7 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
   useSidebar,
+  SidebarTitle, // Ensure SheetTitle (as SidebarTitle) is imported if used
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -89,14 +90,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <SidebarProvider defaultOpen>
       <SidebarDecorated>
-        <SidebarInset>{children}</SidebarInset>
+        {/* Ensure SidebarInset and its children handle overflow properly */}
+        <SidebarInset className="overflow-x-hidden">{children}</SidebarInset>
       </SidebarDecorated>
     </SidebarProvider>
   );
 }
 
 function SidebarDecorated({ children }: { children: React.ReactNode }) {
-  const { open } = useSidebar(); // 'toggleSidebar' is called by SidebarTrigger itself
+  const { open } = useSidebar(); 
   const pathname = usePathname();
   const { user, signOut } = useAuth();
 
@@ -109,7 +111,7 @@ function SidebarDecorated({ children }: { children: React.ReactNode }) {
       {/* Mobile-only top bar */}
       <div className="md:hidden p-2 border-b border-border bg-background sticky top-0 z-30 flex items-center justify-between">
         <div className="flex items-center gap-2">
-           <SidebarTrigger className="h-9 w-9" /> {/* Trigger for mobile */}
+           <SidebarTrigger className="h-9 w-9" /> 
            <BotMessageSquare className="w-7 h-7 text-primary" />
            <h1 className="text-lg font-semibold text-primary">QuelprQuiz</h1>
         </div>
@@ -123,11 +125,9 @@ function SidebarDecorated({ children }: { children: React.ReactNode }) {
         </Link>
       </div>
 
-      {/* Sidebar component that becomes Sheet on mobile */}
       <Sidebar collapsible="icon" variant="sidebar">
         <SidebarHeader className="p-4">
           <div className="flex items-center gap-3">
-            {/* The SidebarTrigger was here, removed as it's now in the mobile top bar */}
             <BotMessageSquare className="w-8 h-8 text-primary" />
             <h1 className={`text-xl font-semibold text-primary transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0 md:opacity-0 group-data-[collapsible=icon]:hidden'}`}>
               QuelprQuiz

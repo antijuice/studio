@@ -35,7 +35,11 @@ const MathText: React.FC<MathTextProps> = ({ text, className }) => {
     }
   });
 
-  return <div className={className}>{elements}</div>;
+  // Add overflow-x-auto to the root div to handle very wide math expressions
+  // The `prose` class helps with text wrapping and styling.
+  // `min-w-0` is added to ensure it behaves correctly within flex containers.
+  return <div className={cn("overflow-x-auto min-w-0", className)}>{elements}</div>;
 };
 
 export { MathText };
+
