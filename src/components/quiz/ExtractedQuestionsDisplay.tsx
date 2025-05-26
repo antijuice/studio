@@ -4,10 +4,12 @@
 import React from 'react';
 import type { ExtractQuestionsFromPdfOutput, ExtractedQuestion } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { BookText, CheckCircle, ChevronDown, ChevronUp, Image as ImageIcon, Info, ListOrdered, Tag, Type, XCircle } from 'lucide-react'; // Added ImageIcon
+import { BookText, CheckCircle, ChevronDown, ChevronUp, Image as ImageIcon, Info, ListOrdered, Save, Tag, Type, XCircle } from 'lucide-react'; // Added Save Icon
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { useToast } from '@/hooks/use-toast';
 
 interface ExtractedQuestionsDisplayProps {
   extractionResult: ExtractQuestionsFromPdfOutput;
@@ -22,6 +24,8 @@ const questionTypeLabels: Record<ExtractedQuestion['questionType'], string> = {
 };
 
 export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestionsDisplayProps) {
+  const { toast } = useToast();
+
   if (!extractionResult || extractionResult.extractedQuestions.length === 0) {
     return (
       <Alert>
@@ -34,11 +38,19 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     );
   }
 
+  const handleSimulatedSave = (questionText: string) => {
+    const snippet = questionText.substring(0, 30) + (questionText.length > 30 ? '...' : '');
+    toast({
+      title: "Simulated Save",
+      description: `Question "${snippet}" would be saved to the bank. (Backend not implemented yet)`,
+    });
+  };
+
   return (
     <div className="space-y-6">
       <Accordion type="multiple" className="w-full">
         {extractionResult.extractedQuestions.map((item, index) => (
-          <AccordionItem value={`item-${index}`} key={`extracted-${index}`}>
+          <AccordionItem value={`item-${index}`} key={`extracted-${index}-${item.questionText.slice(0,10)}`}>
             <AccordionTrigger className="hover:no-underline">
               <div className="flex flex-col md:flex-row md:items-center justify-between w-full pr-2">
                 <span className="font-semibold text-left md:truncate flex-1 mr-2">
@@ -52,14 +64,24 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
             </AccordionTrigger>
             <AccordionContent>
               <div className="space-y-3 p-1">
-                <p><strong><BookText className="inline h-4 w-4 mr-1" />Question:</strong> {item.questionText}</p>
+                <div className="flex justify-between items-start">
+                    <p><strong><BookText className="inline h-4 w-4 mr-1" />Question:</strong> {item.questionText}</p>
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleSimulatedSave(item.questionText)}
+                        className="ml-4 flex-shrink-0"
+                    >
+                        <Save className="mr-2 h-3 w-3" /> Save to Bank
+                    </Button>
+                </div>
                 
                 {item.questionType === 'mcq' && item.options && item.options.length > 0 && (
                   <div>
                     <strong><ListOrdered className="inline h-4 w-4 mr-1" />Options:</strong>
                     <ul className="list-disc list-inside pl-4 space-y-1 mt-1">
                       {item.options.map((opt, optIndex) => (
-                        <li key={optIndex} className={opt === item.answer ? 'text-green-600 font-medium' : ''}>
+                        <li key={`${item.questionText.slice(0,5)}-opt-${optIndex}`} className={opt === item.answer ? 'text-green-600 font-medium' : ''}>
                           {opt}
                           {opt === item.answer && <CheckCircle className="inline h-4 w-4 ml-2 text-green-600" />}
                         </li>
@@ -111,4 +133,3 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     </div>
   );
 }
-

@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import type { ExtractQuestionsFromPdfOutput, ExtractQuestionsFromPdfInput } from "@/lib/types";
 import { extractQuestionsFromPdfAction } from "@/app/actions/quizActions";
-import { Sparkles, UploadCloud, Tags } from "lucide-react"; // Added Tags icon
+import { Sparkles, UploadCloud, Tags, Loader2 } from "lucide-react"; // Added Loader2
 import React, { useState } from "react";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB for potentially larger PDFs with questions
@@ -107,6 +107,8 @@ export function ExtractQuestionsForm({ onExtractionComplete, setIsLoading }: Ext
     };
   }
 
+  const isSubmitting = form.formState.isSubmitting;
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -133,6 +135,7 @@ export function ExtractQuestionsForm({ onExtractionComplete, setIsLoading }: Ext
                           className="hidden" 
                           accept=".pdf"
                           onChange={handleFileChange}
+                          disabled={isSubmitting}
                         />
                     </label>
                 </div>
@@ -151,7 +154,7 @@ export function ExtractQuestionsForm({ onExtractionComplete, setIsLoading }: Ext
             <FormItem>
               <FormLabel>Topic Hint (Optional)</FormLabel>
               <FormControl>
-                <Textarea placeholder="e.g., Chapter 5: Photosynthesis, Focus on key definitions and processes" {...field} />
+                <Textarea placeholder="e.g., Chapter 5: Photosynthesis, Focus on key definitions and processes" {...field} disabled={isSubmitting} />
               </FormControl>
               <FormDescription>
                 Provide a hint about the PDF's topic to improve AI tagging and categorization.
@@ -169,7 +172,7 @@ export function ExtractQuestionsForm({ onExtractionComplete, setIsLoading }: Ext
                 <Tags className="mr-2 h-4 w-4" /> Global Tags (Optional)
               </FormLabel>
               <FormControl>
-                <Input placeholder="e.g., biology, midterm, chapter5" {...field} />
+                <Input placeholder="e.g., biology, midterm, chapter5" {...field} disabled={isSubmitting} />
               </FormControl>
               <FormDescription>
                 Comma-separated tags that will be applied to all questions extracted from this PDF.
@@ -178,9 +181,13 @@ export function ExtractQuestionsForm({ onExtractionComplete, setIsLoading }: Ext
             </FormItem>
           )}
         />
-        <Button type="submit" className="w-full" disabled={form.formState.isSubmitting || !fileName}>
-          <Sparkles className="mr-2 h-4 w-4" />
-          Extract Questions
+        <Button type="submit" className="w-full" disabled={isSubmitting || !fileName}>
+          {isSubmitting ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="mr-2 h-4 w-4" />
+          )}
+          {isSubmitting ? "Extracting..." : "Extract Questions"}
         </Button>
       </form>
     </Form>
