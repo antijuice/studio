@@ -157,11 +157,11 @@ const extractQuestionsFromPdfFlow = ai.defineFlow(
   },
   async input => {
     const {output} = await prompt(input);
-    if (!output) {
-      throw new Error('AI failed to return an output for PDF question extraction.');
+    // More robust check for the output structure
+    if (!output || !output.extractedQuestions || !Array.isArray(output.extractedQuestions)) {
+      console.error('AI output is missing, malformed, or extractedQuestions is not an array. Output received:', JSON.stringify(output, null, 2));
+      throw new Error('AI failed to return a valid structure for extracted questions. Please check the PDF content or try again.');
     }
-    // Ensure the output structure matches, especially the root `extractedQuestions` key.
-    // The prompt is designed to return the full output schema structure.
     return output;
   }
 );
