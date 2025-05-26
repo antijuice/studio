@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import type { ExtractedQuestion as AIExtractedQuestion, ExtractQuestionsFromPdfOutput as AIExtractQuestionsOutput, SaveQuestionToBankOutput, SuggestMcqAnswerInput, SuggestMcqAnswerOutput } from '@/lib/types'; // Use AI types here
+import type { ExtractedQuestion as AIExtractedQuestion, ExtractQuestionsFromPdfOutput as AIExtractQuestionsOutput, SaveQuestionToBankOutput, SuggestMcqAnswerInput, SuggestMcqAnswerOutput, SuggestExplanationInput, SuggestExplanationOutput } from '@/lib/types'; // Use AI types here
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { BookText, CheckCircle, Edit, ImageIcon, Info, Lightbulb, ListOrdered, Save, Tag, Type, XCircle, Loader2, SigmaSquare, Filter, TagsIcon, AlertTriangle, WandSparkles } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from '@/hooks/use-toast';
-import { saveQuestionToBankAction, suggestMcqAnswerAction } from '@/app/actions/quizActions';
+import { saveQuestionToBankAction, suggestMcqAnswerAction, suggestExplanationAction } from '@/app/actions/quizActions';
 import { Separator } from '../ui/separator';
 import { MathText } from '../ui/MathText';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
@@ -56,7 +56,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   const { addQuestionToBank } = useQuestionBank();
   
   const [editableQuestions, setEditableQuestions] = useState<ExtractedQuestion[]>([]);
-  const [saveStates, setSaveStates] = useState<QuestionSaveStateType>({});
+  const [saveStates, setSaveStates = useState<QuestionSaveStateType>({});
   
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
@@ -67,21 +67,20 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [currentQuestionForEdit, setCurrentQuestionForEdit] = useState<ExtractedQuestion | null>(null);
-  const [editedData, setEditedData] = useState<Partial<EditableQuestionData>>({}); // Use Partial for initial state
+  const [editedData, setEditedData = useState<Partial<EditableQuestionData>>({}); 
   const [isSuggestingAnswerInDialog, setIsSuggestingAnswerInDialog] = useState(false);
+  const [isSuggestingExplanationInDialog, setIsSuggestingExplanationInDialog] = useState(false);
+
 
   useEffect(() => {
-    // Initialize or reset editableQuestions when extractionResult changes
     if (extractionResult && extractionResult.extractedQuestions) {
       setEditableQuestions(extractionResult.extractedQuestions);
-      // Reset save states if a new batch of questions is loaded
       setSaveStates({}); 
     }
   }, [extractionResult]);
 
   useEffect(() => {
     if (currentQuestionForEdit) {
-      // Ensure all fields are present, defaulting if necessary
       setEditedData({
         questionText: currentQuestionForEdit.questionText || '',
         questionType: currentQuestionForEdit.questionType,
@@ -152,7 +151,6 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   const triggerSaveProcess = useCallback(async (questionToSave: ExtractedQuestion): Promise<boolean> => {
     setSaveStates(prev => ({ ...prev, [questionToSave.id]: { isLoading: true, isSaved: false } }));
     
-    // Only show individual toast if not part of "Save All"
     if (!isSavingAll) {
       toast({
         title: "Saving Question...",
@@ -195,7 +193,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       }
       return false;
     }
-  }, [toast, addQuestionToBank, isSavingAll]); // isSavingAll added to dependencies
+  }, [toast, addQuestionToBank, isSavingAll]); 
 
   const handleOpenEditDialog = (questionId: string) => {
     const question = editableQuestions.find(q => q.id === questionId);
@@ -212,7 +210,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     }
     
     const questionToSave: ExtractedQuestion = {
-      ...currentQuestionForEdit, // Base with original ID
+      ...currentQuestionForEdit, 
       questionText: editedData.questionText || currentQuestionForEdit.questionText,
       options: editedData.options || currentQuestionForEdit.options,
       answer: editedData.answer || currentQuestionForEdit.answer,
@@ -223,13 +221,12 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       suggestedCategory: editedData.suggestedCategory || currentQuestionForEdit.suggestedCategory,
       marks: editedData.marks !== undefined ? Number(editedData.marks) : currentQuestionForEdit.marks,
       relevantImageDescription: editedData.relevantImageDescription || currentQuestionForEdit.relevantImageDescription,
-      questionType: editedData.questionType || currentQuestionForEdit.questionType, // ensure type is preserved
+      questionType: editedData.questionType || currentQuestionForEdit.questionType, 
     };
 
     setIsEditDialogOpen(false); 
     const success = await triggerSaveProcess(questionToSave);
     if (success) {
-      // Update the item in editableQuestions as well if needed, though save state handles display
        setEditableQuestions(prev => prev.map(q => q.id === questionToSave.id ? questionToSave : q));
     }
     setCurrentQuestionForEdit(null); 
@@ -253,7 +250,6 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     let successCount = 0;
     let failureCount = 0;
     
-    // Use the current state of questions from editableQuestions that match the unsavedFilteredQuestions ids
     const questionsToProcess = editableQuestions.filter(eq => unsavedFilteredQuestions.some(ufq => ufq.id === eq.id));
 
     const results = await Promise.allSettled(
@@ -301,6 +297,31 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       toast({ title: "AI Suggestion Failed", description: errorMessage, variant: "destructive" });
     } finally {
       setIsSuggestingAnswerInDialog(false);
+    }
+  };
+
+  const handleAISuggestExplanationInDialog = async () => {
+    if (!currentQuestionForEdit || !editedData.questionText || !editedData.questionType) {
+      toast({ title: "Cannot Suggest", description: "Question text and type must be available.", variant: "destructive" });
+      return;
+    }
+    setIsSuggestingExplanationInDialog(true);
+    toast({ title: "AI Suggestion", description: "AI is crafting an explanation..." });
+    try {
+      const input: SuggestExplanationInput = {
+        questionText: editedData.questionText,
+        questionType: editedData.questionType,
+        options: editedData.options,
+        answer: editedData.answer,
+      };
+      const result: SuggestExplanationOutput = await suggestExplanationAction(input);
+      setEditedData(prev => ({ ...prev, explanation: result.suggestedExplanation }));
+      toast({ title: "AI Explanation Suggested", description: "Explanation field updated."});
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error suggesting explanation.";
+      toast({ title: "AI Explanation Failed", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsSuggestingExplanationInDialog(false);
     }
   };
 
@@ -515,7 +536,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                           ) : (
                             <Edit className="mr-2 h-3 w-3" />
                           )}
-                          {currentSaveState.isLoading ? "Saving..." : currentSaveState.isSaved ? "Saved" : "Review & Save"}
+                          {currentSaveState.isLoading ? "Saving..." : currentSaveState.isSaved ? "Saved" : "Review &amp; Save"}
                       </Button>
                   </div>
                   
@@ -591,7 +612,8 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
           setIsEditDialogOpen(open);
           if (!open) {
             setCurrentQuestionForEdit(null);
-            setIsSuggestingAnswerInDialog(false); // Reset suggestion loading state
+            setIsSuggestingAnswerInDialog(false); 
+            setIsSuggestingExplanationInDialog(false);
           }
         }}>
           <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
@@ -635,7 +657,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                         className="mt-2 w-full"
                       >
                         {isSuggestingAnswerInDialog ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lightbulb className="mr-2 h-4 w-4" />}
-                        {isSuggestingAnswerInDialog ? "Suggesting..." : "AI Suggest Answer"}
+                        {isSuggestingAnswerInDialog ? "Suggesting Answer..." : "AI Suggest Answer"}
                       </Button>
                   )}
                 </>
@@ -651,6 +673,18 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
               <div>
                 <Label htmlFor="editExplanation" className="font-semibold">Explanation</Label>
                 <Textarea id="editExplanation" value={editedData.explanation || ''} onChange={(e) => handleInputChange('explanation', e.target.value)} className="mt-1 min-h-[80px]" />
+                 {(!editedData.explanation || editedData.explanation.trim() === "") && (
+                     <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleAISuggestExplanationInDialog} 
+                        disabled={isSuggestingExplanationInDialog || !editedData.questionText}
+                        className="mt-2 w-full"
+                      >
+                        {isSuggestingExplanationInDialog ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <WandSparkles className="mr-2 h-4 w-4" />}
+                        {isSuggestingExplanationInDialog ? "Suggesting Explanation..." : "AI Suggest Explanation"}
+                      </Button>
+                  )}
               </div>
               
               <div>

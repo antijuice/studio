@@ -26,6 +26,11 @@ import {
   type SuggestMcqAnswerInput,
   type SuggestMcqAnswerOutput,
 } from "@/ai/flows/suggest-mcq-answer-flow";
+import {
+  suggestExplanation as suggestExplanationAI,
+  type SuggestExplanationInput, // Ensure correct type is imported
+  type SuggestExplanationOutput,
+} from "@/ai/flows/suggest-explanation-flow";
 import type { 
   CustomQuizGenOutput, 
   PdfQuizGenOutput, 
@@ -118,6 +123,18 @@ export async function suggestMcqAnswerAction(input: SuggestMcqAnswerInput): Prom
   } catch (error) {
     console.error("Error in suggestMcqAnswerAction:", error);
     const errorMessage = error instanceof Error ? error.message : "An unknown error occurred while suggesting an answer.";
+    throw new Error(errorMessage);
+  }
+}
+
+export async function suggestExplanationAction(input: SuggestExplanationInput): Promise<SuggestExplanationOutput> {
+  try {
+    const result = await suggestExplanationAI(input);
+    return result;
+  } catch (error)
+{
+    console.error("Error in suggestExplanationAction:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred while suggesting an explanation.";
     throw new Error(errorMessage);
   }
 }

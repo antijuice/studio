@@ -149,3 +149,15 @@ export type SuggestMcqAnswerInput = {
 export type SuggestMcqAnswerOutput = {
   suggestedAnswer: string;
 };
+
+// For AI suggesting an explanation
+export type SuggestExplanationInput = {
+  questionText: string;
+  questionType: ExtractedQuestion['questionType'];
+  options?: string[]; // Relevant for MCQs
+  answer?: string;    // The known correct answer, if available
+};
+
+export type SuggestExplanationOutput = {
+  suggestedExplanation: string;
+};
