@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import type { ExtractQuestionsFromPdfOutput, ExtractedQuestion, SaveQuestionToBankOutput } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BookText, CheckCircle, ChevronDown, ChevronUp, Image as ImageIcon, Info, ListOrdered, Save, Tag, Type, XCircle, Loader2, SigmaSquare, Filter } from 'lucide-react';
+import { BookText, CheckCircle, ChevronDown, ChevronUp, Image as ImageIcon, Info, ListOrdered, Save, Tag, Type, XCircle, Loader2, SigmaSquare, Filter, TagsIcon } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from '@/hooks/use-toast';
 import { saveQuestionToBankAction } from '@/app/actions/quizActions';
@@ -40,6 +40,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   const [saveStates, setSaveStates] = useState<QuestionSaveStateType>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [tagSearchTerm, setTagSearchTerm] = useState(''); // New state for tag filtering
 
   const uniqueCategories = useMemo(() => {
     if (!extractionResult || !extractionResult.extractedQuestions) return [];
@@ -49,14 +50,28 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
 
   const filteredQuestions = useMemo(() => {
     if (!extractionResult || !extractionResult.extractedQuestions) return [];
+    
+    const searchTags = tagSearchTerm
+      .toLowerCase()
+      .split(',')
+      .map(tag => tag.trim())
+      .filter(tag => tag !== '');
+
     return extractionResult.extractedQuestions.filter(question => {
       const matchesSearchTerm = searchTerm === '' || 
         question.questionText.toLowerCase().includes(searchTerm.toLowerCase());
+      
       const matchesCategory = selectedCategory === '' || selectedCategory === 'all' || 
         question.suggestedCategory === selectedCategory;
-      return matchesSearchTerm && matchesCategory;
+      
+      const matchesTags = searchTags.length === 0 || 
+        searchTags.every(searchTag => 
+          question.suggestedTags.some(qTag => qTag.toLowerCase().includes(searchTag))
+        );
+
+      return matchesSearchTerm && matchesCategory && matchesTags;
     });
-  }, [extractionResult, searchTerm, selectedCategory]);
+  }, [extractionResult, searchTerm, selectedCategory, tagSearchTerm]);
 
   if (!extractionResult || extractionResult.extractedQuestions.length === 0) {
     return (
@@ -107,21 +122,21 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   return (
     <div className="space-y-6">
       <Card className="p-4 sm:p-6 bg-muted/30 border shadow-inner">
-        <div className="flex flex-col sm:flex-row gap-4 items-end">
-          <div className="flex-grow w-full sm:w-auto">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+          <div className="md:col-span-1">
             <Label htmlFor="search-questions" className="flex items-center mb-1 text-sm font-medium">
-              <Filter className="h-4 w-4 mr-2 text-primary"/>Search Questions
+              <Filter className="h-4 w-4 mr-2 text-primary"/>Search Text
             </Label>
             <Input
               id="search-questions"
               type="text"
-              placeholder="Type to search by question text..."
+              placeholder="Search question text..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="bg-background"
             />
           </div>
-          <div className="w-full sm:w-auto sm:min-w-[200px]">
+          <div className="md:col-span-1">
             <Label htmlFor="category-filter" className="flex items-center mb-1 text-sm font-medium">
               <Type className="h-4 w-4 mr-2 text-primary"/>Filter by Category
             </Label>
@@ -138,6 +153,20 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="md:col-span-1">
+            <Label htmlFor="tag-search" className="flex items-center mb-1 text-sm font-medium">
+              <TagsIcon className="h-4 w-4 mr-2 text-primary"/>Filter by Tags
+            </Label>
+            <Input
+              id="tag-search"
+              type="text"
+              placeholder="e.g., biology, mitosis"
+              value={tagSearchTerm}
+              onChange={(e) => setTagSearchTerm(e.target.value)}
+              className="bg-background"
+            />
+            <p className="text-xs text-muted-foreground mt-1">Comma-separated. Shows questions matching ALL tags.</p>
           </div>
         </div>
       </Card>
@@ -157,12 +186,12 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
           const currentSaveState = saveStates[item.id] || { isLoading: false, isSaved: false };
           return (
             <AccordionItem value={item.id} key={item.id}>
-              <AccordionTrigger className="hover:no-underline">
+              <AccordionTrigger className="hover:no-underline text-left">
                 <div className="flex flex-col md:flex-row md:items-center justify-between w-full pr-2">
-                  <span className="font-semibold text-left md:truncate flex-1 mr-2">
+                  <span className="font-semibold md:truncate flex-1 mr-2">
                     Q{index + 1}: {item.questionText.substring(0, 80)}{item.questionText.length > 80 ? '...' : ''}
                   </span>
-                  <div className="flex items-center gap-2 mt-1 md:mt-0 flex-shrink-0">
+                  <div className="flex items-center gap-2 mt-1 md:mt-0 flex-shrink-0 flex-wrap">
                     {item.marks !== undefined && <Badge variant="outline" className="flex items-center gap-1"><SigmaSquare className="h-3 w-3"/> {item.marks}</Badge>}
                     <Badge variant="outline">{questionTypeLabels[item.questionType]}</Badge>
                     <Badge variant="secondary">{item.suggestedCategory}</Badge>
@@ -214,13 +243,15 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                   )}
 
                   {item.answer && (
-                    <p className="text-green-700 dark:text-green-400">
-                      <strong><CheckCircle className="inline h-4 w-4 mr-1" />Correct Answer:</strong> {item.answer}
-                    </p>
+                    <Alert variant="default" className="mt-2 bg-green-500/10 border-green-500/30">
+                       <CheckCircle className="inline h-4 w-4 mr-1 text-green-700 dark:text-green-500" />
+                       <AlertTitle className="font-semibold text-green-700 dark:text-green-500">Correct Answer</AlertTitle>
+                       <AlertDescription className="text-green-700/90 dark:text-green-500/90">{item.answer}</AlertDescription>
+                    </Alert>
                   )}
 
                   {item.explanation && (
-                    <Alert className="bg-muted/40">
+                    <Alert className="bg-muted/40 mt-2">
                       <Info className="inline h-4 w-4 mr-1" />
                       <AlertTitle className="font-semibold">Explanation</AlertTitle>
                       <AlertDescription>{item.explanation}</AlertDescription>
