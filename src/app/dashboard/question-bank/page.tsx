@@ -154,25 +154,25 @@ export default function QuestionBankPage() {
     const validQuizMcqs: MCQType[] = initialMatchingExtractedQuestions
       .map(eq => ({
         id: eq.id,
-        question: eq.questionText,
+        question: eq.questionText, // Ensure questionText is mapped to question
         options: eq.options ? [...eq.options] : [],
         answer: typeof eq.answer === 'string' ? eq.answer : "",
         explanation: eq.explanation || "No explanation provided.",
         type: 'mcq' as const, 
       }))
-      .filter(q => q.options.length > 0 && q.answer.trim() !== "");
+      .filter(q => q.options.length > 0 && q.answer.trim() !== ""); // Validated here
 
 
     if (initialMatchingExtractedQuestions.length > 0 && validQuizMcqs.length === 0) {
         toast({
             title: "Not Enough Valid MCQs",
-            description: `Found ${initialMatchingExtractedQuestions.length} MCQs matching your criteria, but none were complete (e.g., missing options or a defined answer) after validation. Please check the banked questions or broaden your criteria.`,
+            description: `Found ${initialMatchingExtractedQuestions.length} question(s) matching your criteria, but none were complete MCQs (e.g., missing options or a defined answer) after validation. Please check the banked questions or broaden your criteria.`,
             variant: "destructive",
             duration: 7000,
         });
         setIsGeneratingQuizByCriteria(false);
         return;
-    } else if (validQuizMcqs.length === 0) {
+    } else if (validQuizMcqs.length === 0) { // This covers the case where initialMatchingExtractedQuestions.length was 0
          toast({
             title: "No MCQs Found Matching Criteria",
             description: "No MCQs in the bank match your specified description, tags, or category. Try broadening your search.",
@@ -209,7 +209,7 @@ export default function QuestionBankPage() {
       if(criteriaKey !== lastCriteriaKeyForPool) setLastCriteriaKeyForPool(criteriaKey);
     }
     
-    if (!currentShuffledIds || currentShuffledIds.length === 0) {
+    if (!currentShuffledIds || currentShuffledIds.length === 0) { // This check is now effectively on validQuizMcqs
         toast({ title: "Error Building Question Pool", description: "Could not form a question pool for these criteria from valid MCQs.", variant: "destructive" });
         setIsGeneratingQuizByCriteria(false);
         return;
@@ -247,7 +247,7 @@ export default function QuestionBankPage() {
       .filter(Boolean) as MCQType[]; // Filter out any undefined if IDs somehow mismatch (should not happen)
 
 
-    if (finalQuizQuestions.length === 0) { 
+    if (finalQuizQuestions.length === 0) { // This check is now after selection from a pool of valid IDs
       toast({
         title: "No Questions Selected",
         description: "Could not select any questions for the quiz, though a pool was available. This might be an internal error.",
@@ -258,11 +258,15 @@ export default function QuestionBankPage() {
     }
     
     let quizGeneratedMessage = `Generated a quiz with ${finalQuizQuestions.length} question(s) from ${numAvailableInPool} available valid MCQs.`;
-    if (finalQuizQuestions.length < criteriaForm.numQuestions && !poolCycledThisTurn) {
-      quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}) were available or valid in the bank for these criteria.`;
+    if (finalQuizQuestions.length < criteriaForm.numQuestions && numAvailableInPool < criteriaForm.numQuestions && !poolCycledThisTurn) {
+      quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}) were available in the bank for these criteria.`;
     } else if (finalQuizQuestions.length < criteriaForm.numQuestions && poolCycledThisTurn) {
        quizGeneratedMessage += ` Fewer than requested (${criteriaForm.numQuestions}). All available questions in this pool have been used. Pool has been re-shuffled.`;
+    } else if (finalQuizQuestions.length < criteriaForm.numQuestions && numToSelect < criteriaForm.numQuestions && numToSelect === numAvailableInPool) {
+      // This case covers when numToSelect was limited by numAvailableInPool, even if numQuestions was higher
+      quizGeneratedMessage += ` All ${numAvailableInPool} available question(s) for these criteria were selected.`;
     }
+
 
     if (poolCycledThisTurn) {
        toast({
@@ -306,18 +310,18 @@ export default function QuestionBankPage() {
       .filter(eq => eq.questionType === 'mcq') 
       .map(eq => ({
         id: eq.id,
-        question: eq.questionText,
+        question: eq.questionText, // Mapped from questionText
         options: eq.options ? [...eq.options] : [],
         answer: typeof eq.answer === 'string' ? eq.answer : "",
         explanation: eq.explanation || "No explanation provided.",
         type: 'mcq' as const,
       }))
-      .filter(q => q.options.length > 0 && q.answer.trim() !== ""); 
+      .filter(q => q.options.length > 0 && q.answer.trim() !== ""); // Validated here
 
     if (mcqQuestionsForQuiz.length === 0) {
       toast({
         title: "No Valid MCQs in Assembly",
-        description: "None of the selected questions were complete MCQs (e.g., missing options or a defined answer).",
+        description: `Found ${assembled.length} question(s) in assembly, but none were complete MCQs (e.g., missing options or a defined answer) after validation.`,
         variant: "destructive",
       });
       return;
@@ -383,7 +387,7 @@ export default function QuestionBankPage() {
         </div>
       </header>
 
-      <Card className="shadow-lg sticky top-4 md:top-[calc(theme(spacing.16)+theme(spacing.4))] z-20 bg-card/95 backdrop-blur-sm border">
+      <Card className="shadow-lg sticky top-4 md:top-[calc(theme(spacing.4)_+_env(safe-area-inset-top))] z-20 bg-card/95 backdrop-blur-sm border">
         <CardHeader>
             <div className="flex justify-between items-center">
                 <CardTitle className="text-xl flex items-center gap-2"><PackagePlus className="h-6 w-6 text-accent"/>Quiz Assembly</CardTitle>
@@ -771,3 +775,4 @@ export default function QuestionBankPage() {
     </TooltipProvider>
   );
 }
+
