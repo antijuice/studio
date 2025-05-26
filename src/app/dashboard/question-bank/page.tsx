@@ -70,6 +70,7 @@ const QuestionTypeIcon = ({ type }: { type: ExtractedQuestion['questionType'] })
   return <FileText className="h-4 w-4 text-gray-500" />;
 };
 
+const ALL_FILTER_VALUE = "__ALL__";
 
 export default function QuestionBankPage() {
   // Basic state for filters - will be expanded later
@@ -79,8 +80,8 @@ export default function QuestionBankPage() {
 
   const filteredQuestions = mockBankQuestions.filter(q => {
     const matchesSearch = searchTerm === '' || q.questionText.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === '' || q.suggestedCategory === selectedCategory;
-    const matchesType = selectedType === '' || q.questionType === selectedType;
+    const matchesCategory = selectedCategory === '' || selectedCategory === ALL_FILTER_VALUE || q.suggestedCategory === selectedCategory;
+    const matchesType = selectedType === '' || selectedType === ALL_FILTER_VALUE || q.questionType === selectedType;
     return matchesSearch && matchesCategory && matchesType;
   });
   
@@ -116,14 +117,14 @@ export default function QuestionBankPage() {
             <Select value={selectedCategory} onValueChange={setSelectedCategory}>
               <SelectTrigger><SelectValue placeholder="Filter by Category" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Categories</SelectItem>
+                <SelectItem value={ALL_FILTER_VALUE}>All Categories</SelectItem>
                 {uniqueCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={selectedType} onValueChange={setSelectedType}>
               <SelectTrigger><SelectValue placeholder="Filter by Type" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Types</SelectItem>
+                <SelectItem value={ALL_FILTER_VALUE}>All Types</SelectItem>
                 {uniqueTypes.map(type => <SelectItem key={type} value={type}>{questionTypeLabels[type as ExtractedQuestion['questionType']]}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -203,3 +204,4 @@ export default function QuestionBankPage() {
     </div>
   );
 }
+
