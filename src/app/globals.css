@@ -55,7 +55,32 @@ body {
     --sidebar-ring: 274 100% 60%; /* Electric Violet for ring (Unchanged) */
   }
 
-  /* Removed .dark specific block as dark theme is default */
+  /* Native Scrollbar Styling */
+  /* For Webkit browsers (Chrome, Safari, Edge) */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px; 
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(220 10% 15%); /* Darker than main background for track */
+    border-radius: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted)); 
+    border-radius: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(220 8% 40%); /* Lighter version of muted for hover */
+  }
+
+  /* For Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted)) hsl(220 10% 15%); /* thumb track */
+  }
 }
 
 @layer base {
@@ -66,4 +91,3 @@ body {
     @apply bg-background text-foreground;
   }
 }
-
