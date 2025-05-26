@@ -15,6 +15,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { useToast } from '@/hooks/use-toast';
 import { saveQuestionToBankAction } from '@/app/actions/quizActions';
 import { Separator } from '../ui/separator';
+import { MathText } from '../ui/MathText'; // Import MathText
 
 interface ExtractedQuestionsDisplayProps {
   extractionResult: ExtractQuestionsFromPdfOutput;
@@ -54,7 +55,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
   const filteredQuestions = useMemo(() => {
     if (!extractionResult || !extractionResult.extractedQuestions) return [];
     
-    const searchTags = tagSearchTerm
+    const searchTagsArray = tagSearchTerm
       .toLowerCase()
       .split(',')
       .map(tag => tag.trim())
@@ -67,8 +68,8 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
       const matchesCategory = selectedCategory === '' || selectedCategory === 'all' || 
         question.suggestedCategory === selectedCategory;
       
-      const matchesTags = searchTags.length === 0 || 
-        searchTags.every(searchTag => 
+      const matchesTags = searchTagsArray.length === 0 || 
+        searchTagsArray.every(searchTag => 
           question.suggestedTags.some(qTag => qTag.toLowerCase().includes(searchTag))
         );
 
@@ -82,8 +83,6 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
 
   const handleSaveToBank = useCallback(async (question: ExtractedQuestion): Promise<boolean> => {
     setSaveStates(prev => ({ ...prev, [question.id]: { isLoading: true, isSaved: false } }));
-    // Minimal toast for individual save when part of batch, rely on summary toast.
-    // If not saving all, then a more descriptive toast is fine.
     if (!isSavingAll) {
       toast({
         title: "Saving Question...",
@@ -154,7 +153,6 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
             successCount++;
         } else {
             failureCount++;
-            // Individual error toasts for failed saves are handled by handleSaveToBank
         }
     });
 
@@ -268,7 +266,7 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
               <AccordionTrigger className="hover:no-underline text-left">
                 <div className="flex flex-col md:flex-row md:items-center justify-between w-full pr-2">
                   <span className="font-semibold md:truncate flex-1 mr-2">
-                    Q{index + 1}: {item.questionText.substring(0, 80)}{item.questionText.length > 80 ? '...' : ''}
+                     <MathText text={`Q${index + 1}: ${item.questionText.substring(0, 80)}${item.questionText.length > 80 ? '...' : ''}`} />
                   </span>
                   <div className="flex items-center gap-2 mt-1 md:mt-0 flex-shrink-0 flex-wrap">
                     {item.marks !== undefined && <Badge variant="outline" className="flex items-center gap-1"><SigmaSquare className="h-3 w-3"/> {item.marks}</Badge>}
@@ -282,9 +280,10 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                 <div className="space-y-3 p-1">
                   <div className="flex justify-between items-start">
                       <div>
-                        <p><strong><BookText className="inline h-4 w-4 mr-1" />Question:</strong> {item.questionText}</p>
+                        <p className="font-semibold flex items-start gap-1.5"><BookText className="inline h-4 w-4 mr-1 mt-1 flex-shrink-0" />Question:</p>
+                        <MathText text={item.questionText} className="ml-6 prose prose-sm dark:prose-invert max-w-none"/>
                         {item.marks !== undefined && (
-                          <p className="text-sm text-muted-foreground mt-1">
+                          <p className="text-sm text-muted-foreground mt-1 ml-6">
                             <strong><SigmaSquare className="inline h-4 w-4 mr-1" />Marks:</strong> {item.marks}
                           </p>
                         )}
@@ -312,9 +311,8 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                       <strong><ListOrdered className="inline h-4 w-4 mr-1" />Options:</strong>
                       <ul className="list-disc list-inside pl-4 space-y-1 mt-1">
                         {item.options.map((opt, optIndex) => (
-                          <li key={`${item.id}-opt-${optIndex}`} 
-                              className={opt === item.answer ? 'text-green-600 dark:text-green-400 font-medium' : 'text-foreground/80'}>
-                            {opt}
+                          <li key={`${item.id}-opt-${optIndex}`} >
+                             <MathText text={opt} className={`inline ${opt === item.answer ? 'text-green-600 dark:text-green-400 font-medium' : 'text-foreground/80'}`} />
                             {opt === item.answer && <CheckCircle className="inline h-4 w-4 ml-2 text-green-600 dark:text-green-400" />}
                           </li>
                         ))}
@@ -322,11 +320,13 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                     </div>
                   )}
 
-                  {item.answer && item.questionType !== 'mcq' && ( // Only show non-MCQ answer if explicitly present
+                  {item.answer && item.questionType !== 'mcq' && (
                     <Alert variant="default" className="mt-2 bg-green-500/10 border-green-500/30">
                        <CheckCircle className="inline h-4 w-4 mr-1 text-green-700 dark:text-green-500" />
                        <AlertTitle className="font-semibold text-green-700 dark:text-green-500">Answer</AlertTitle>
-                       <AlertDescription className="text-green-700/90 dark:text-green-500/90">{item.answer}</AlertDescription>
+                       <AlertDescription className="text-green-700/90 dark:text-green-500/90">
+                         <MathText text={item.answer} />
+                       </AlertDescription>
                     </Alert>
                   )}
                   
@@ -335,7 +335,9 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
                     <Alert className="bg-muted/40 mt-2">
                       <Info className="inline h-4 w-4 mr-1" />
                       <AlertTitle className="font-semibold">Explanation</AlertTitle>
-                      <AlertDescription>{item.explanation}</AlertDescription>
+                      <AlertDescription>
+                        <MathText text={item.explanation} />
+                      </AlertDescription>
                     </Alert>
                   )}
 
@@ -374,4 +376,3 @@ export function ExtractedQuestionsDisplay({ extractionResult }: ExtractedQuestio
     </div>
   );
 }
-

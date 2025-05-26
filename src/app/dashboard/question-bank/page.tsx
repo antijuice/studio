@@ -9,26 +9,27 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { LibraryBig, Tag, Type, Filter, Search, FileText, ListChecks, MessageSquare, CheckCircle, SigmaSquare } from 'lucide-react';
 import type { ExtractedQuestion } from '@/lib/types'; 
+import { MathText } from '@/components/ui/MathText'; // Import MathText
 
 // Mock data for the question bank - replace with actual data fetching later
 const mockBankQuestions: ExtractedQuestion[] = [
   {
     id: 'bank-q1',
-    questionText: 'What is the powerhouse of the cell?',
+    questionText: 'What is the powerhouse of the cell? This involves $E=mc^2$.',
     questionType: 'mcq',
     options: ['Nucleus', 'Mitochondria', 'Ribosome', 'Endoplasmic Reticulum'],
     answer: 'Mitochondria',
-    explanation: 'Mitochondria are responsible for generating most of the cell\'s supply of adenosine triphosphate (ATP), used as a source of chemical energy.',
+    explanation: 'Mitochondria are responsible for generating most of the cell\'s supply of adenosine triphosphate (ATP), used as a source of chemical energy. Equation: $$ATP \rightarrow ADP + P_i$$',
     suggestedTags: ['biology', 'cell biology', 'organelles'],
     suggestedCategory: 'Biology',
     marks: 2,
   },
   {
     id: 'bank-q2',
-    questionText: 'Explain the process of photosynthesis in brief.',
+    questionText: 'Explain the process of photosynthesis in brief, including the formula $6CO_2 + 6H_2O \rightarrow C_6H_{12}O_6 + 6O_2$.',
     questionType: 'short_answer',
     answer: 'Photosynthesis is the process used by plants, algae, and certain bacteria to harness energy from sunlight and turn it into chemical energy.',
-    explanation: 'Key stages include light-dependent reactions (capturing light energy) and light-independent reactions (Calvin cycle - fixing carbon dioxide).',
+    explanation: 'Key stages include light-dependent reactions (capturing light energy) and light-independent reactions (Calvin cycle - fixing carbon dioxide). The overall equation is $$6\text{CO}_2 + 6\text{H}_2\text{O} + \text{Light Energy} \rightarrow \text{C}_6\text{H}_{12}\text{O}_6 + 6\text{O}_2$$.',
     suggestedTags: ['biology', 'plants', 'photosynthesis', 'energy'],
     suggestedCategory: 'Biology',
     marks: 5,
@@ -44,11 +45,11 @@ const mockBankQuestions: ExtractedQuestion[] = [
   },
   {
     id: 'bank-q4',
-    questionText: 'Solve for x: 2x + 5 = 15',
+    questionText: 'Solve for $x$: $2x + 5 = 15$',
     questionType: 'mcq', 
-    options: ['x = 3', 'x = 5', 'x = 7', 'x = 10'],
-    answer: 'x = 5',
-    explanation: 'Subtract 5 from both sides: 2x = 10. Divide by 2: x = 5.',
+    options: ['$x = 3$', '$x = 5$', '$x = 7$', '$x = 10$'],
+    answer: '$x = 5$',
+    explanation: 'Subtract $5$ from both sides: $2x = 10$. Divide by $2$: $x = 5$.',
     suggestedTags: ['mathematics', 'algebra', 'equations'],
     suggestedCategory: 'Mathematics',
     marks: 3,
@@ -102,10 +103,10 @@ export default function QuestionBankPage() {
         q.questionText.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (q.explanation && q.explanation.toLowerCase().includes(searchTerm.toLowerCase()));
       
-      const matchesCategory = selectedCategory === ALL_FILTER_VALUE || 
+      const matchesCategory = selectedCategory === ALL_FILTER_VALUE || selectedCategory === '' ||
         q.suggestedCategory === selectedCategory;
       
-      const matchesType = selectedType === ALL_FILTER_VALUE || 
+      const matchesType = selectedType === ALL_FILTER_VALUE || selectedType === '' ||
         q.questionType === selectedType;
         
       return matchesSearch && matchesCategory && matchesType;
@@ -165,11 +166,11 @@ export default function QuestionBankPage() {
                 <Card key={question.id} className="shadow-md hover:shadow-lg transition-shadow bg-card">
                   <CardHeader>
                     <div className="flex justify-between items-start">
-                        <CardTitle className="text-lg flex items-center gap-2">
+                        <div className="text-lg flex items-center gap-2 flex-1 min-w-0">
                             <QuestionTypeIcon type={question.questionType} />
-                            {question.questionText.substring(0,100)}{question.questionText.length > 100 ? '...' : ''}
-                        </CardTitle>
-                        <div className="flex items-center gap-2">
+                             <MathText text={question.questionText.substring(0,100) + (question.questionText.length > 100 ? '...' : '')} className="truncate"/>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
                             {question.marks !== undefined && (
                                 <Badge variant="outline" className="flex items-center gap-1">
                                     <SigmaSquare className="h-3 w-3"/> {question.marks} Marks
@@ -187,16 +188,16 @@ export default function QuestionBankPage() {
                         <div className="text-sm space-y-1 mb-2">
                             <p className="font-medium text-xs text-muted-foreground mb-1">Options:</p>
                             {question.options.map((opt, i) => (
-                                <p key={i} className={`ml-2 text-xs ${opt === question.answer ? 'text-green-500 font-semibold' : 'text-foreground/80'}`}>
-                                    • {opt} {opt === question.answer && '(Correct)'}
-                                </p>
+                                <div key={i} className={`ml-2 text-xs flex items-center ${opt === question.answer ? 'text-green-500 font-semibold' : 'text-foreground/80'}`}>
+                                    <span className="mr-1">•</span> <MathText text={opt} /> {opt === question.answer && <span className="ml-1">(Correct)</span>}
+                                </div>
                             ))}
                         </div>
                     )}
                      {question.explanation && (
-                         <p className="text-xs text-muted-foreground italic p-2 bg-muted/30 rounded-md border">
-                           <strong>Explanation:</strong> {question.explanation.substring(0,150)}{question.explanation.length > 150 ? '...' : ''}
-                        </p>
+                         <div className="text-xs text-muted-foreground italic p-2 bg-muted/30 rounded-md border">
+                           <strong>Explanation:</strong> <MathText text={question.explanation.substring(0,150) + (question.explanation.length > 150 ? '...' : '')} />
+                        </div>
                      )}
                     {question.suggestedTags && question.suggestedTags.length > 0 && (
                         <div className="mt-3 flex flex-wrap items-center gap-1">
@@ -241,9 +242,11 @@ export default function QuestionBankPage() {
                     <li>Verification workflows for quality assurance.</li>
                     <li>Using banked questions to generate new custom quizzes.</li>
                     <li>Advanced search and organization capabilities.</li>
+                    <li>Full LaTeX rendering for complex mathematical notations.</li>
                 </ul>
             </CardContent>
         </Card>
     </div>
   );
 }
+

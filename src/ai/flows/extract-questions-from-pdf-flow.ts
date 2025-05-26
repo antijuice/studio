@@ -34,24 +34,24 @@ const InternalExtractQuestionsFromPdfInputSchema = z_.object({
 });
 
 const InternalExtractedQuestionSchema = z_.object({
-  questionText: z_.string().describe('The full text of the question.'),
+  questionText: z_.string().describe('The full text of the question. Mathematical expressions should be in LaTeX format (e.g., $E=mc^2$$ or $$ x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a} $$).'),
   questionType: z_
     .enum(['mcq', 'short_answer', 'true_false', 'fill_in_the_blank', 'unknown'])
     .describe('The identified type of the question.'),
   options: z_
-    .array(z_.string())
+    .array(z_.string().describe('A multiple choice option. Mathematical expressions should be in LaTeX format.'))
     .optional()
     .describe('For "mcq" type, an array of choices. Otherwise, this may be omitted.'),
   answer: z_
     .string()
     .optional()
     .describe(
-      "The correct answer. For 'mcq', this should be the full text of the correct option. For 'short_answer' or 'fill_in_the_blank', it's the expected answer text. Omit if not applicable or unidentifiable."
+      "The correct answer. Mathematical expressions should be in LaTeX format. For 'mcq', this should be the full text of the correct option. For 'short_answer' or 'fill_in_the_blank', it's the expected answer text. Omit if not applicable or unidentifiable."
     ),
   explanation: z_
     .string()
     .optional()
-    .describe('An explanation for the correct answer, if available or inferable from the text.'),
+    .describe('An explanation for the correct answer, if available or inferable from the text. Mathematical expressions should be in LaTeX format.'),
   suggestedTags: z_
     .array(z_.string())
     .describe('An array of 3-7 relevant keywords or tags for the question, derived from its content and including any global tags if provided.'),
@@ -102,11 +102,16 @@ const prompt = ai.definePrompt({
 Your task is to analyze the provided PDF document and extract individual quiz questions from it.
 For each question, you must identify its text, determine its type (especially 'mcq' for multiple choice questions), extract options and the correct answer (if applicable), provide an explanation (if available or inferable), suggest relevant tags, a category, describe any relevant images, and identify the number of marks/points if specified.
 
+VERY IMPORTANT: When mathematical expressions or equations are present in the question text, options, answers, or explanations, you MUST preserve them using standard LaTeX notation.
+- Use $...$ for inline mathematics (e.g., 'the value of $x$ is $5 \times 10^3$').
+- Use $$...$$ for display/block mathematics (e.g., 'solve the equation $$ax^2 + bx + c = 0$$').
+- Ensure the LaTeX is well-formed and correctly represents the mathematical content from the PDF.
+
 Document Content (from PDF):
 {{media url=pdfDataUri}}
 
 {{#if topicHint}}
-The general topic or context of this document is: {{{topicHint}}}. Use this information to guide your tagging, categorization, and image relevance assessment more accurately.
+The general topic or context of this document is: {{{topicHint}}}. Use this information to guide your tagging, categorization, image relevance assessment, and LaTeX formatting more accurately.
 {{/if}}
 
 {{#if globalTags}}
@@ -120,15 +125,15 @@ For each question, provide 3-5 relevant and specific keywords or tags based on i
 Please structure your output as a JSON object strictly adhering to the schema provided for "ExtractQuestionsFromPdfOutput".
 The root object must have a key "extractedQuestions", which is an array of question objects.
 Each question object in the "extractedQuestions" array must have the following fields:
-- "questionText": (string) The full, complete text of the question.
+- "questionText": (string) The full, complete text of the question. Ensure any math is in LaTeX.
 - "questionType": (enum: 'mcq', 'short_answer', 'true_false', 'fill_in_the_blank', 'unknown') The identified type of the question. Ensure 'mcq' is used for multiple-choice questions.
-- "options": (array of strings, optional) For 'mcq' type, list all multiple choice options. Omit if not an MCQ.
-- "answer": (string, optional) The correct answer.
+- "options": (array of strings, optional) For 'mcq' type, list all multiple choice options. Each option must have math in LaTeX. Omit if not an MCQ.
+- "answer": (string, optional) The correct answer. Ensure any math is in LaTeX.
     - For 'mcq', this must be the full text of the correct option (e.g., "Paris", not "C").
     - For 'short_answer' or 'fill_in_the_blank', this is the expected answer text.
     - For 'true_false', this should be "True" or "False".
     - Omit this field if the answer is not identifiable or not applicable.
-- "explanation": (string, optional) An explanation for the correct answer. If not directly present, try to infer or generate a concise one if possible. Omit if not applicable.
+- "explanation": (string, optional) An explanation for the correct answer. Ensure any math is in LaTeX. If not directly present, try to infer or generate a concise one if possible. Omit if not applicable.
 - "suggestedTags": (array of strings) As instructed above, combine global tags (if provided) with 3-5 question-specific tags.
 - "suggestedCategory": (string) Suggest a single, broader academic subject or category for this question (e.g., "Physics", "Literature", "Ancient History", "Calculus", "Organic Chemistry").
 - "relevantImageDescription": (string, optional) Examine the content of the question and its surrounding area on the same page in the PDF. If there is a distinct visual element (like a diagram, chart, photograph, or illustration) that is *directly and highly relevant* to understanding or answering that specific question, provide a brief description of this visual element. For example, 'A diagram of a plant cell with labels for nucleus and chloroplast, relevant to the question about cell organelles.' If no such specific, relevant visual is present for a question, or if it's just decorative or not on the same page, omit this field. Do not attempt to extract image data itself.
@@ -141,11 +146,11 @@ Important Instructions:
 - Ensure the 'answer' for MCQs is the option text, not just a letter/number, unless the options themselves are solely letters/numbers.
 - If the PDF contains sections that are not questions, do not attempt to create question objects for them.
 - Mark Allocation Guidance: If a question in the PDF explicitly indicates a number of marks or points (the "marks" field), interpret this as a guide for the expected depth and comprehensiveness of the answer and/or explanation.
-    - For 'short_answer' or 'fill_in_the_blank' types, ensure the 'answer' field (if one can be determined) contains enough distinct pieces of information or key concepts to justify the mark allocation.
-    - For all question types, particularly 'mcq' and 'true_false', the 'explanation' field should be sufficiently detailed to cover the key concepts implied by the mark allocation. For example, a 5-mark question's explanation should ideally touch upon several distinct facets or justifications related to the correct answer.
+    - For 'short_answer' or 'fill_in_the_blank' types, ensure the 'answer' field (if one can be determined and contains math, it's in LaTeX) contains enough distinct pieces of information or key concepts to justify the mark allocation.
+    - For all question types, particularly 'mcq' and 'true_false', the 'explanation' field (ensure math is in LaTeX) should be sufficiently detailed to cover the key concepts implied by the mark allocation. For example, a 5-mark question's explanation should ideally touch upon several distinct facets or justifications related to the correct answer.
     - This does not mean explanations must be artificially long or list a specific number of bullet points, but their informational content should reflect the question's weight. Prioritize accuracy and clarity.
     - If no marks are specified, generate the answer/explanation based on the question's content as usual.
-- Adhere strictly to the JSON output format and schema descriptions.
+- Adhere strictly to the JSON output format and schema descriptions, including LaTeX formatting for all mathematical content.
 `,
 });
 
