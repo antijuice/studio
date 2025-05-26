@@ -10,73 +10,78 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {z}_ from 'genkit'; // Using z from genkit internal for schema only
 
-const ExtractQuestionsFromPdfInputSchema = z.object({
-  pdfDataUri: z
+// Internal Zod Schemas - NOT EXPORTED from this 'use server' file
+const InternalExtractQuestionsFromPdfInputSchema = z_.object({
+  pdfDataUri: z_
     .string()
     .describe(
       "A PDF document, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
     ),
-  topicHint: z
+  topicHint: z_
     .string()
     .optional()
     .describe(
       'Optional: A hint about the general topic of the PDF to improve tagging and categorization (e.g., "Chapter 5 on Photosynthesis").'
     ),
-  globalTags: z
+  globalTags: z_
     .string()
     .optional()
     .describe(
         'Optional: Comma-separated global tags to apply to all extracted questions (e.g., "Midterm Exam, Biology 101"). These will be added to the question-specific tags.'
     ),
 });
-export type ExtractQuestionsFromPdfInput = z.infer<typeof ExtractQuestionsFromPdfInputSchema>;
 
-const ExtractedQuestionSchema = z.object({
-  questionText: z.string().describe('The full text of the question.'),
-  questionType: z
+const InternalExtractedQuestionSchema = z_.object({
+  questionText: z_.string().describe('The full text of the question.'),
+  questionType: z_
     .enum(['mcq', 'short_answer', 'true_false', 'fill_in_the_blank', 'unknown'])
     .describe('The identified type of the question.'),
-  options: z
-    .array(z.string())
+  options: z_
+    .array(z_.string())
     .optional()
     .describe('For "mcq" type, an array of choices. Otherwise, this may be omitted.'),
-  answer: z
+  answer: z_
     .string()
     .optional()
     .describe(
       "The correct answer. For 'mcq', this should be the full text of the correct option. For 'short_answer' or 'fill_in_the_blank', it's the expected answer text. Omit if not applicable or unidentifiable."
     ),
-  explanation: z
+  explanation: z_
     .string()
     .optional()
     .describe('An explanation for the correct answer, if available or inferable from the text.'),
-  suggestedTags: z
-    .array(z.string())
+  suggestedTags: z_
+    .array(z_.string())
     .describe('An array of 3-7 relevant keywords or tags for the question, derived from its content and including any global tags if provided.'),
-  suggestedCategory: z
+  suggestedCategory: z_
     .string()
     .describe(
       "A suggested broader academic category for this question (e.g., 'Algebra', 'Cell Biology', 'World War II', 'Literary Analysis')."
     ),
-  relevantImageDescription: z
+  relevantImageDescription: z_
     .string()
     .optional()
     .describe(
         "A brief description of a visual element (diagram, chart, image) from the PDF directly associated with this question, if one exists on the same page. Describes what the image shows and its relation to the question."
     ),
 });
-export type ExtractedQuestion = z.infer<typeof ExtractedQuestionSchema>;
 
-const ExtractQuestionsFromPdfOutputSchema = z.object({
-  extractedQuestions: z
-    .array(ExtractedQuestionSchema)
+const InternalExtractQuestionsFromPdfOutputSchema = z_.object({
+  extractedQuestions: z_
+    .array(InternalExtractedQuestionSchema)
     .describe(
       'An array of question objects, each containing the question details, suggested tags (including global ones), a category, and a description of any relevant image, extracted from the PDF.'
     ),
 });
-export type ExtractQuestionsFromPdfOutput = z.infer<typeof ExtractQuestionsFromPdfOutputSchema>;
+
+
+// Exported Types (mirroring internal Zod schemas for external use)
+export type ExtractQuestionsFromPdfInput = z_.infer<typeof InternalExtractQuestionsFromPdfInputSchema>;
+export type ExtractedQuestion = z_.infer<typeof InternalExtractedQuestionSchema>; // Note: This type is distinct from the one in lib/types.ts that includes `id`
+export type ExtractQuestionsFromPdfOutput = z_.infer<typeof InternalExtractQuestionsFromPdfOutputSchema>;
+
 
 export async function extractQuestionsFromPdf(
   input: ExtractQuestionsFromPdfInput
@@ -86,8 +91,8 @@ export async function extractQuestionsFromPdf(
 
 const prompt = ai.definePrompt({
   name: 'extractQuestionsFromPdfPrompt',
-  input: {schema: ExtractQuestionsFromPdfInputSchema},
-  output: {schema: ExtractQuestionsFromPdfOutputSchema},
+  input: {schema: InternalExtractQuestionsFromPdfInputSchema},
+  output: {schema: InternalExtractQuestionsFromPdfOutputSchema},
   prompt: `You are an AI assistant specialized in extracting structured information from educational documents, including MCQ exams.
 Your task is to analyze the provided PDF document and extract individual quiz questions from it.
 For each question, you must identify its text, determine its type (especially 'mcq' for multiple choice questions), extract options and the correct answer (if applicable), provide an explanation (if available or inferable), suggest relevant tags, a category, and describe any relevant images.
@@ -136,8 +141,8 @@ Important Instructions:
 const extractQuestionsFromPdfFlow = ai.defineFlow(
   {
     name: 'extractQuestionsFromPdfFlow',
-    inputSchema: ExtractQuestionsFromPdfInputSchema,
-    outputSchema: ExtractQuestionsFromPdfOutputSchema,
+    inputSchema: InternalExtractQuestionsFromPdfInputSchema,
+    outputSchema: InternalExtractQuestionsFromPdfOutputSchema,
   },
   async input => {
     const {output} = await prompt(input);

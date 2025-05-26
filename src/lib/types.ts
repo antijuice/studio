@@ -1,3 +1,4 @@
+
 import type { LucideIcon } from 'lucide-react';
 
 export interface BaseQuestion {
@@ -87,7 +88,9 @@ export type ShortAnswerEvaluationOutput = {
 };
 
 // For AI extracted questions from PDF (matching AI flow output)
+// Adding a unique identifier for client-side state management
 export type ExtractedQuestion = {
+  id: string; // Added for local state management
   questionText: string;
   questionType: 'mcq' | 'short_answer' | 'true_false' | 'fill_in_the_blank' | 'unknown';
   options?: string[];
@@ -127,5 +130,12 @@ export type ExtractQuestionsFromPdfInput = {
   pdfDataUri: string;
   topicHint?: string;
   globalTags?: string; // Comma-separated tags
+};
+
+// Output for saving a question to the bank (can be expanded later)
+export type SaveQuestionToBankOutput = {
+  success: boolean;
+  questionId?: string; // ID of the saved question in the bank
+  message: string;
 };
 
