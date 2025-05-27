@@ -20,7 +20,7 @@ import { QuizDisplay } from '@/components/quiz/QuizDisplay';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { useAuth } from '@/contexts/AuthContext'; // Added useAuth
+import { useAuth } from '@/contexts/AuthContext'; 
 
 const questionTypeLabels: Record<ExtractedQuestion['questionType'], string> = {
   mcq: 'Multiple Choice',
@@ -51,7 +51,7 @@ interface CriteriaQuizFormState {
 export default function QuestionBankPage() {
   const [bankedQuestions, setBankedQuestions] = useState<BankedQuestionFromDB[]>([]);
   const [isLoadingBank, setIsLoadingBank] = useState(true);
-  const { user } = useAuth(); // Get authenticated user
+  const { user } = useAuth(); 
 
   const { 
     addQuestionToAssembly, 
@@ -89,14 +89,15 @@ export default function QuestionBankPage() {
     async function fetchBank() {
       if (!user) {
         setIsLoadingBank(false); 
-        // Optionally, show a message or redirect if user is somehow not authenticated
-        // For now, just don't fetch if user is null.
+        setBankedQuestions([]); // Clear questions if user logs out
         return;
       }
       setIsLoadingBank(true);
       try {
+        console.log(`QuestionBankPage: Fetching questions for user ${user.uid}`);
         const questions = await getBankedQuestionsForUserAction(user.uid);
         setBankedQuestions(questions);
+        console.log(`QuestionBankPage: Fetched ${questions.length} questions.`);
       } catch (error) {
         toast({
           title: "Error Fetching Question Bank",
@@ -109,14 +110,21 @@ export default function QuestionBankPage() {
       }
     }
     fetchBank();
-  }, [toast, user]); // Added user to dependency array
+  }, [toast, user]); 
 
   const handleRemoveQuestion = async (questionDocId: string) => {
     const questionToRemove = bankedQuestions.find(q => q.id === questionDocId);
-    if (!questionToRemove) return;
+    if (!questionToRemove || !user) {
+      toast({
+        title: "Cannot Remove Question",
+        description: !user ? "You must be logged in." : "Question not found.",
+        variant: "destructive"
+      });
+      return;
+    }
 
     try {
-      await removeQuestionFromBankAction(questionDocId);
+      await removeQuestionFromBankAction(questionDocId, user.uid);
       setBankedQuestions(prev => prev.filter(q => q.id !== questionDocId));
       toast({
         title: "Question Removed",
@@ -193,7 +201,7 @@ export default function QuestionBankPage() {
     const criteriaTagsArray = criteriaForm.tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
     
     const initialMatchingExtractedQuestions = bankedQuestions.filter(eq => {
-      if (eq.questionType !== 'mcq') return false;
+      if (eq.questionType !== 'mcq') return false; // Only consider MCQs for criteria-based quiz generation
 
       const matchesDescription = criteriaForm.description.trim() === '' ||
         eq.questionText.toLowerCase().includes(criteriaForm.description.trim().toLowerCase()) ||
@@ -206,33 +214,35 @@ export default function QuestionBankPage() {
       
       return matchesDescription && matchesTags && matchesCategory;
     });
+
+    if (initialMatchingExtractedQuestions.length === 0) {
+        toast({
+            title: "No MCQs Found Matching Criteria",
+            description: "No MCQs in the bank match your specified description, tags, or category. Try broadening your search.",
+            variant: "destructive",
+            duration: 6000,
+        });
+        setIsGeneratingQuizByCriteria(false);
+        return;
+    }
     
     const validQuizMcqs: MCQType[] = initialMatchingExtractedQuestions
       .map(eq => ({
-        id: eq.id,
+        id: eq.id, // Use the Firestore document ID
         question: eq.questionText,
         options: eq.options ? [...eq.options] : [],
-        answer: typeof eq.answer === 'string' ? eq.answer : "",
+        answer: typeof eq.answer === 'string' ? eq.answer.trim() : "",
         explanation: eq.explanation || "No explanation provided.",
         type: 'mcq' as const, 
       }))
       .filter(q => q.options.length > 0 && q.answer.trim() !== "");
 
-    if (initialMatchingExtractedQuestions.length > 0 && validQuizMcqs.length === 0) {
+    if (validQuizMcqs.length === 0) {
         toast({
             title: "Some MCQs Matched Criteria, But None Were Valid for Quiz",
             description: `Found ${initialMatchingExtractedQuestions.length} MCQ(s) matching criteria, but none had both options and a defined, non-empty answer. Please review banked questions or broaden criteria.`,
             variant: "destructive",
             duration: 7000,
-        });
-        setIsGeneratingQuizByCriteria(false);
-        return;
-    } else if (validQuizMcqs.length === 0) { 
-         toast({
-            title: "No Valid MCQs Found Matching Criteria",
-            description: "No complete MCQs (with options and answers) in the bank match your specified description, tags, or category. Try broadening your search.",
-            variant: "destructive",
-            duration: 6000,
         });
         setIsGeneratingQuizByCriteria(false);
         return;
@@ -283,7 +293,7 @@ export default function QuestionBankPage() {
     let poolCycledThisTurn = false;
     if (newCurrentIndex === 0 && (currentIndex + numToSelect >= numAvailableInPool) && numAvailableInPool > 0 && numToSelect > 0) {
       poolCycledThisTurn = true;
-      const reShuffledIds = Array.from(currentValidMcqIdsSet).sort(() => 0.5 - Math.random());
+      const reShuffledIds = Array.from(currentValidMcqIdsSet).sort(() => 0.5 - Math.random()); // Re-shuffle for next cycle
       const updatedShuffledPools = new Map(shuffledPools);
       updatedShuffledPools.set(criteriaKey, reShuffledIds);
       setShuffledPools(updatedShuffledPools);
@@ -315,7 +325,6 @@ export default function QuestionBankPage() {
     } else if (finalQuizQuestions.length < criteriaForm.numQuestions && numToSelect < criteriaForm.numQuestions && numToSelect === numAvailableInPool) {
       quizGeneratedMessage += ` All ${numAvailableInPool} available question(s) for these criteria were selected.`;
     }
-
 
     if (poolCycledThisTurn) {
        toast({
@@ -447,10 +456,10 @@ export default function QuestionBankPage() {
             </p>
         </CardContent>
         <CardFooter className="flex flex-col sm:flex-row justify-end gap-2">
-            <Button variant="outline" onClick={() => clearAssembly()} disabled={assemblyCount === 0}>
+            <Button variant="outline" onClick={() => clearAssembly()} disabled={assemblyCount === 0 || !user}>
                 <Trash2 className="mr-2 h-4 w-4" /> Clear Selection
             </Button>
-            <Button onClick={handleStartAssembledQuiz} disabled={assemblyCount === 0} className="bg-accent hover:bg-accent/90">
+            <Button onClick={handleStartAssembledQuiz} disabled={assemblyCount === 0 || !user} className="bg-accent hover:bg-accent/90">
                 <PlayCircle className="mr-2 h-4 w-4" /> Start Quiz with {assemblyCount} Assembled Questions
             </Button>
         </CardFooter>
@@ -538,7 +547,7 @@ export default function QuestionBankPage() {
             <CardFooter>
               <Button 
                 onClick={handleGenerateQuizByCriteria} 
-                disabled={isGeneratingQuizByCriteria || bankedQuestions.filter(q => q.questionType === 'mcq').length === 0}
+                disabled={isGeneratingQuizByCriteria || bankedQuestions.filter(q => q.questionType === 'mcq').length === 0 || !user}
                 className="w-full md:w-auto ml-auto bg-primary hover:bg-primary/90"
               >
                 {isGeneratingQuizByCriteria ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlayCircle className="mr-2 h-4 w-4"/> }
@@ -600,6 +609,14 @@ export default function QuestionBankPage() {
               <Loader2 className="h-12 w-12 animate-spin text-primary" />
               <p className="ml-3 text-muted-foreground">Loading your question bank...</p>
             </div>
+          ) : !user ? (
+             <div className="text-center py-10">
+              <AlertTriangle className="h-16 w-16 text-orange-400 mx-auto mb-4" />
+              <p className="text-xl font-medium text-muted-foreground">Please Log In</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                You need to be logged in to view and manage your question bank.
+              </p>
+            </div>
           ) : bankedQuestions.length === 0 && searchTerm === '' && selectedCategoryFilter === ALL_FILTER_VALUE && selectedTypeFilter === ALL_FILTER_VALUE && tagSearchTerm === '' ? (
              <div className="text-center py-10">
               <LibraryBig className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
@@ -617,7 +634,7 @@ export default function QuestionBankPage() {
                   <AccordionItem value={question.id} key={question.id} className="bg-card border rounded-lg shadow-md hover:shadow-lg transition-shadow overflow-hidden">
                     <AccordionTrigger className="p-4 hover:no-underline text-left">
                         <div className="flex flex-col md:flex-row md:items-start justify-between w-full">
-                            <div className="font-semibold flex-1 mr-2 min-w-0 overflow-hidden">
+                             <div className="font-semibold flex-1 mr-2 min-w-0 overflow-hidden">
                                 <MathText text={`Q${index + 1}: ${question.questionText}`} className="text-base block" />
                             </div>
                             <div className="flex items-center gap-2 mt-2 md:mt-0 flex-shrink-0 flex-wrap">
@@ -680,6 +697,7 @@ export default function QuestionBankPage() {
                                     size="sm" 
                                     className="text-muted-foreground hover:text-foreground"
                                     onClick={() => handleOpenViewDetails(question)}
+                                    disabled={!user}
                                 >
                                     <Eye className="mr-2 h-4 w-4" /> View Full Details
                                 </Button>
@@ -690,6 +708,7 @@ export default function QuestionBankPage() {
                                             size="sm" 
                                             className="text-red-500 hover:bg-red-500/10 hover:text-red-600 border-red-500/50"
                                             onClick={() => handleRemoveQuestion(question.id)}
+                                            disabled={!user}
                                         >
                                             <Trash2 className="mr-2 h-4 w-4" /> Remove
                                         </Button>
@@ -712,6 +731,7 @@ export default function QuestionBankPage() {
                                         size="sm" 
                                         className="ml-2"
                                         onClick={() => removeQuestionFromAssembly(question.id)}
+                                        disabled={!user}
                                     >
                                         <MinusCircle className="mr-2 h-4 w-4" /> Remove from Quiz
                                     </Button>
@@ -721,6 +741,7 @@ export default function QuestionBankPage() {
                                         size="sm" 
                                         className="ml-2 bg-primary hover:bg-primary/90"
                                         onClick={() => addQuestionToAssembly(question)} 
+                                        disabled={!user}
                                     >
                                         <PlusCircle className="mr-2 h-4 w-4" /> Add to New Quiz
                                     </Button>
@@ -801,7 +822,7 @@ export default function QuestionBankPage() {
                   <Label className="font-semibold text-sm">Options:</Label>
                   <ul className="list-none mt-1 space-y-1">
                     {currentQuestionForView.options.map((opt, index) => (
-                      <li key={`view-opt-${index}`} className={`p-2 border rounded-md text-sm flex items-start gap-1.5 ${opt === currentQuestionForView.answer ? 'bg-green-500/10 border-green-500/30 text-green-700' : 'bg-card'}`}>
+                      <li key={`view-opt-${index}`} className={`p-2 border rounded-md text-sm flex items-start gap-1.5 ${opt === currentQuestionForView.answer ? 'bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-500' : 'bg-card'}`}>
                          <span className="font-mono text-xs opacity-70">{(index + 1)}.</span>
                          <div className="min-w-0 flex-1">
                            <MathText text={opt} />
@@ -855,7 +876,7 @@ export default function QuestionBankPage() {
                 </div>
               )}
                {!currentQuestionForView.options && currentQuestionForView.questionType === 'mcq' && <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Missing Options</AlertTitle><AlertDescription>This MCQ is missing its options.</AlertDescription></Alert>}
-               {!currentQuestionForView.answer && <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Missing Answer</AlertTitle><AlertDescription>The answer for this question is not defined.</AlertDescription></Alert>}
+               {(!currentQuestionForView.answer || currentQuestionForView.answer.trim() === "") && <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Missing Answer</AlertTitle><AlertDescription>The answer for this question is not defined.</AlertDescription></Alert>}
             </div>
             <DialogFooter>
               <DialogClose asChild>
@@ -869,5 +890,7 @@ export default function QuestionBankPage() {
     </TooltipProvider>
   );
 }
+
+    
 
     

@@ -41,7 +41,6 @@ import type {
   ExtractQuestionsFromPdfInput,
   BankedQuestionFromDB
 } from "@/lib/types"; 
-// Import auth to check its state on the server (for debugging)
 import { auth, db, collection, addDoc, serverTimestamp, query, where, getDocs, doc, deleteDoc, Timestamp } from "@/lib/firebase"; 
 
 export async function generateCustomQuizAction(input: GenerateCustomQuizInput): Promise<CustomQuizGenOutput> {
@@ -103,64 +102,67 @@ export async function extractQuestionsFromPdfAction(input: ExtractQuestionsFromP
 
 export async function saveQuestionToBankAction(
   questionData: Omit<ExtractedQuestion, 'id' | 'userId' | 'createdAt'>,
-  userId: string // userId passed from client
+  userId: string // userId MUST be passed from an authenticated client
 ): Promise<SaveQuestionToBankOutput> {
-  if (!userId) {
-    // This check is a fallback; client should always send a valid UID.
-    throw new Error("User ID not provided. Cannot save question to bank.");
-  }
+  
+  const serverAuthInstance = auth; // auth is imported from @/lib/firebase (client SDK instance)
+  const serverCurrentUser = serverAuthInstance.currentUser;
 
-  // --- DEBUGGING ---
-  const serverAuthInstance = auth; // auth is imported from @/lib/firebase
-  const serverCurrentUser = serverAuthInstance.currentUser; // This will likely be null in a Server Action environment for client SDK
-  console.log("[Server Action - saveQuestionToBankAction] Auth object available on server:", !!serverAuthInstance);
-  console.log("[Server Action - saveQuestionToBankAction] auth.currentUser on server:", serverCurrentUser ? serverCurrentUser.uid : null);
-  console.log("[Server Action - saveQuestionToBankAction] userId passed from client to be saved:", userId);
-  // --- END DEBUGGING ---
+  console.log(`[Server Action - saveQuestionToBankAction] Server-side client SDK auth.currentUser: ${serverCurrentUser ? serverCurrentUser.uid : 'null (expected in server actions)'}`);
+  console.log(`[Server Action - saveQuestionToBankAction] Attempting to save question for client-passed userId: ${userId}`);
+
+  if (!userId) {
+    console.error("[Server Action - saveQuestionToBankAction] Error: userId parameter was not provided by the client call.");
+    throw new Error("User ID not provided by client. Cannot save question to bank.");
+  }
+  
+  // Note: serverCurrentUser will be null here because the client SDK's auth state
+  // is not automatically carried over to server-side instances.
+  // Firestore rules (request.auth) are the ultimate check for the actual requester's identity.
+  if (!serverCurrentUser) {
+      console.warn("[Server Action - saveQuestionToBankAction] Diagnostic: auth.currentUser is null on this server-side client SDK instance. Firestore rules relying on 'request.auth != null' will fail if this call to Firestore is not otherwise authenticated as the end-user by Firebase backend services.");
+  }
 
   try {
     const questionToSave = {
       ...questionData,
-      userId, // Use the userId passed from the client
+      userId, 
       createdAt: serverTimestamp(), 
     };
-    // console.log("[Server Action] Attempting to save to Firestore:", JSON.stringify(questionToSave, null, 2));
     const docRef = await addDoc(collection(db, "questions"), questionToSave);
-    // console.log("[Server Action] Question saved to Firestore with ID:", docRef.id);
     return {
       success: true,
       questionId: docRef.id,
       message: `Question "${questionData.questionText.substring(0, 30)}..." saved to bank.`,
     };
   } catch (error) {
-    console.error("[Server Action - saveQuestionToBankAction] Error saving question to Firestore:", error); 
+    console.error("[Server Action - saveQuestionToBankAction] Error during Firestore addDoc:", error);
+    let errorMessage = "Failed to save question to bank due to an unknown error. Check server logs.";
     if (error instanceof Error) {
-        // Check if it's a FirebaseError and has a code
-        const firebaseError = error as any; // Cast to any to check for 'code'
-        if (firebaseError.code) {
-             // Log the specific Firebase error code and message
-            console.error(`[Server Action - saveQuestionToBankAction] Firebase Error Code: ${firebaseError.code}, Message: ${firebaseError.message}`);
-            throw new Error(`Firestore Error (${firebaseError.code}): ${firebaseError.message}`);
+        const firebaseError = error as any; 
+        if (firebaseError.code === 'permission-denied' || (firebaseError.message && firebaseError.message.toLowerCase().includes('permission'))) {
+             errorMessage = `Firestore Permission Denied: Failed to save question for user ${userId}. This often means 'request.auth' was null in Firestore rules or the rules explicitly denied the write. (Server-side auth.currentUser is typically null in this environment). Details: ${firebaseError.message}`;
+             console.error(`[Server Action - saveQuestionToBankAction] Firestore permission error for userId: ${userId}. This indicates 'request.auth' was likely null in your Firestore rules execution context for this server-originated request.`);
+        } else if (firebaseError.code) {
+            errorMessage = `Firestore Error (${firebaseError.code}): ${firebaseError.message}`;
+        } else {
+            errorMessage = `Failed to save question to bank: ${error.message}`;
         }
-        throw new Error(`Failed to save question to bank: ${error.message}`);
     }
-    throw new Error("Failed to save question to bank due to an unknown error. Check server logs.");
+    throw new Error(errorMessage);
   }
 }
 
 export async function getBankedQuestionsForUserAction(userId: string): Promise<BankedQuestionFromDB[]> {
    if (!userId) {
-    // This check is a fallback; client should always send a valid UID.
-    console.warn("[Server Action - getBankedQuestionsForUserAction] User ID not provided. Returning empty question bank.");
+    console.warn("[Server Action - getBankedQuestionsForUserAction] User ID not provided by client. Returning empty question bank.");
     return [];
   }
-  // --- DEBUGGING ---
+  
   const serverAuthInstance = auth; 
   const serverCurrentUser = serverAuthInstance.currentUser; 
-  console.log("[Server Action - getBankedQuestionsForUserAction] Auth object available on server:", !!serverAuthInstance);
-  console.log("[Server Action - getBankedQuestionsForUserAction] auth.currentUser on server (expected null):", serverCurrentUser ? serverCurrentUser.uid : null);
-  console.log("[Server Action - getBankedQuestionsForUserAction] Fetching questions for userId from client:", userId);
-  // --- END DEBUGGING ---
+  console.log(`[Server Action - getBankedQuestionsForUserAction] Server-side client SDK auth.currentUser: ${serverCurrentUser ? serverCurrentUser.uid : 'null (expected in server actions)'}`);
+  console.log(`[Server Action - getBankedQuestionsForUserAction] Fetching questions for client-passed userId: ${userId}`);
 
   try {
     const q = query(collection(db, "questions"), where("userId", "==", userId));
@@ -178,28 +180,35 @@ export async function getBankedQuestionsForUserAction(userId: string): Promise<B
     return questions;
   } catch (error) {
     console.error("[Server Action - getBankedQuestionsForUserAction] Error fetching questions from Firestore:", error);
+    let errorMessage = "Failed to fetch questions from bank. Check server logs.";
     if (error instanceof Error) {
         const firebaseError = error as any; 
-        if (firebaseError.code) {
-            console.error(`[Server Action - getBankedQuestionsForUserAction] Firebase Error Code: ${firebaseError.code}, Message: ${firebaseError.message}`);
-            throw new Error(`Firestore Error (${firebaseError.code}): ${firebaseError.message}`);
+        if (firebaseError.code === 'permission-denied') {
+            errorMessage = `Firestore Permission Denied: Failed to fetch questions for user ${userId}. This indicates 'request.auth' was likely null or did not match in Firestore rules. Details: ${firebaseError.message}`;
+        } else if (firebaseError.code) {
+            errorMessage = `Firestore Error (${firebaseError.code}): ${firebaseError.message}`;
+        } else {
+            errorMessage = `Failed to fetch questions from bank: ${error.message}`;
         }
-        throw new Error(`Failed to fetch questions from bank: ${error.message}`);
     }
-    throw new Error("Failed to fetch questions from bank. Check server logs.");
+    throw new Error(errorMessage);
   }
 }
 
-export async function removeQuestionFromBankAction(questionDocId: string): Promise<{success: boolean, message: string}> {
-  // Firestore rules are the primary guard here.
-  // --- DEBUGGING ---
+export async function removeQuestionFromBankAction(questionDocId: string, userId: string): Promise<{success: boolean, message: string}> {
+  // The userId parameter is added here for consistency and potential future use,
+  // but primary validation relies on Firestore rules checking request.auth.uid against resource.data.userId.
   const serverAuthInstance = auth; 
   const serverCurrentUser = serverAuthInstance.currentUser; 
-  console.log("[Server Action - removeQuestionFromBankAction] Auth object available on server:", !!serverAuthInstance);
-  console.log("[Server Action - removeQuestionFromBankAction] auth.currentUser on server (expected null):", serverCurrentUser ? serverCurrentUser.uid : null);
-  console.log("[Server Action - removeQuestionFromBankAction] Attempting to remove docId:", questionDocId);
-  // --- END DEBUGGING ---
+  console.log(`[Server Action - removeQuestionFromBankAction] Server-side client SDK auth.currentUser: ${serverCurrentUser ? serverCurrentUser.uid : 'null (expected in server actions)'}`);
+  console.log(`[Server Action - removeQuestionFromBankAction] Attempting to remove docId: ${questionDocId} (associated with client-passed userId: ${userId})`);
+
+  if(!questionDocId || !userId) {
+    throw new Error("Question document ID or User ID not provided for removal.");
+  }
+
   try {
+    // Firestore rules are the primary guard here, ensuring request.auth.uid matches resource.data.userId
     await deleteDoc(doc(db, "questions", questionDocId));
     return {
       success: true,
@@ -207,15 +216,18 @@ export async function removeQuestionFromBankAction(questionDocId: string): Promi
     };
   } catch (error) {
     console.error("[Server Action - removeQuestionFromBankAction] Error removing question from Firestore:", error);
+    let errorMessage = "Failed to remove question from bank. Check server logs.";
     if (error instanceof Error) {
         const firebaseError = error as any; 
-        if (firebaseError.code) {
-            console.error(`[Server Action - removeQuestionFromBankAction] Firebase Error Code: ${firebaseError.code}, Message: ${firebaseError.message}`);
-            throw new Error(`Firestore Error (${firebaseError.code}): ${firebaseError.message}`);
+        if (firebaseError.code === 'permission-denied') {
+            errorMessage = `Firestore Permission Denied: Failed to remove question ${questionDocId}. This indicates 'request.auth' was likely null or did not match in Firestore rules for user ${userId}. Details: ${firebaseError.message}`;
+        } else if (firebaseError.code) {
+            errorMessage = `Firestore Error (${firebaseError.code}): ${firebaseError.message}`;
+        } else {
+            errorMessage = `Failed to remove question from bank: ${error.message}`;
         }
-        throw new Error(`Failed to remove question from bank: ${error.message}`);
     }
-    throw new Error("Failed to remove question from bank. Check server logs.");
+    throw new Error(errorMessage);
   }
 }
 
@@ -243,5 +255,5 @@ export async function suggestExplanationAction(input: SuggestExplanationInput): 
   }
 }
     
-
+ 
     
