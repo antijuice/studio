@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet" // Added SheetTitle import
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet" 
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
@@ -765,7 +765,6 @@ export {
   SidebarRail,
   SidebarSeparator,
   SidebarTrigger,
-  SidebarTitle, // Export SheetTitle as SidebarTitle for consistency if needed, or use SheetTitle directly
   useSidebar,
 }
 
